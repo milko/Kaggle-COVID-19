@@ -305,23 +305,16 @@ def county_health_rankings(
 
 		# Load dataset.
 		collection.truncate()
-		records = [
+		collection.insert_many(
+			[
 				{k:v for k,v in m.items() if pd.notnull(v)}
 				for m in df.to_dict(orient='rows')
-			]
-		for record in records:
-			result = collection.insert(record, sync=True)
-			break
-		return result
-		# return collection.insert_many(
-		# 	[
-		# 		{k:v for k,v in m.items() if pd.notnull(v)}
-		# 		for m in df.to_dict(orient='rows')
-		# 	],
-		# 	sync=True
-		# )
+			],
+			sync=True,
+			silent=True
+		)
 
-		return df.drop('_key', axis=1)									# ==>
+		return df														# ==>
 
 	###
 	# Retrieve from database
