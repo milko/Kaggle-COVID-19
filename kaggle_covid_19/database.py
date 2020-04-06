@@ -21,6 +21,67 @@ class Database:
 		'covid_sources_for_counties', 'covid_sources_for_states',
 		'covid_statistics_for_states_daily', 'ecdc_worldwide'
 	]
+	us_states = {
+		'Alabama': 'AL',
+		'Alaska': 'AK',
+		'Arizona': 'AZ',
+		'Arkansas': 'AR',
+		'California': 'CA',
+		'Colorado': 'CO',
+		'Connecticut': 'CT',
+		'Delaware': 'DE',
+		'District of Columbia': 'DC',
+		'Florida': 'FL',
+		'Georgia': 'GA',
+		'Hawaii': 'HI',
+		'Idaho': 'ID',
+		'Illinois': 'IL',
+		'Indiana': 'IN',
+		'Iowa': 'IA',
+		'Kansas': 'KS',
+		'Kentucky': 'KY',
+		'Louisiana': 'LA',
+		'Maine': 'ME',
+		'Maryland': 'MD',
+		'Massachusetts': 'MA',
+		'Michigan': 'MI',
+		'Minnesota': 'MN',
+		'Mississippi': 'MS',
+		'Missouri': 'MO',
+		'Montana': 'MT',
+		'Nebraska': 'NE',
+		'Nevada': 'NV',
+		'New Hampshire': 'NH',
+		'New Jersey': 'NJ',
+		'New Mexico': 'NM',
+		'New York': 'NY',
+		'North Carolina': 'NC',
+		'North Dakota': 'ND',
+		'Ohio': 'OH',
+		'Oklahoma': 'OK',
+		'Oregon': 'OR',
+		'Pennsylvania': 'PA',
+		'Rhode Island': 'RI',
+		'South Carolina': 'SC',
+		'South Dakota': 'SD',
+		'Tennessee': 'TN',
+		'Texas': 'TX',
+		'Utah': 'UT',
+		'Vermont': 'VT',
+		'Virginia': 'VA',
+		'Washington': 'WA',
+		'West Virginia': 'WV',
+		'Wisconsin': 'WI',
+		'Wyoming': 'WY',
+		'American Samoa': 'AS',
+		'Guam': 'GU',
+		'Marshall Islands': 'MH',
+		'Micronesia': 'FM',
+		'Northern Marianas': 'MP',
+		'Palau': 'PW',
+		'Puerto Rico': 'PR',
+		'Virgin Islands': 'VI'
+	}
 
 	# Instantiate object
 	def __init__(
@@ -164,9 +225,6 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Add country.
-		dataset['iso_level_1'] = 'USA'
-
 		# Normalise boolean fields.
 		bool_fields = [
 			'is_verified', 'is_hidden', 'is_location_screening_patients',
@@ -186,60 +244,6 @@ class Database:
 					)
 			)
 
-		# Normalise state field.
-		state_names = {
-			'Arizona': 'AZ',
-			'Arkansas': 'AR',
-			'California': 'CA',
-			'Colorado': 'CO',
-			'Connecticut': 'CT',
-			'Florida': 'FL',
-			'Hawaii': 'HI',
-			'Idaho': 'ID',
-			'Indiana': 'IN',
-			'Iowa': 'IA',
-			'Kansas': 'KS',
-			'Kentucky': 'KY',
-			'Louisiana': 'LA',
-			'Maryland': 'MD',
-			'Massachusetts': 'MA',
-			'Michigan': 'MI',
-			'Minnesota': 'MN',
-			'Mississippi': 'MS',
-			'Montana': 'MT',
-			'Nebraska': 'NE',
-			'New Mexico': 'NM',
-			'North Carolina': 'NC',
-			'North Dakota': 'ND',
-			'Ohio': 'OH',
-			'Oklahoma': 'OK',
-			'Oregon': 'OR',
-			'Pennsylvania': 'PA',
-			'South Carolina': 'SC',
-			'South Dakota': 'SD',
-			'Tennessee': 'TN',
-			'Utah': 'UT',
-			'Vermont': 'VT',
-			'Virginia': 'VA',
-			'West Virginia': 'WV',
-			'Wisconsin': 'WI',
-			'Wyoming': 'WY'
-		}
-
-		dataset['location_address_region'] = \
-			dataset['location_address_region'].apply(
-				lambda x: state_names[x]
-					if x in state_names.keys()
-					else x
-			)
-
-		# Copy to iso level 2
-		dataset['iso_level_2'] = dataset['location_address_region']
-
-		# Copy to iso level 3
-		dataset['iso_level_3'] = \
-			dataset['location_address_locality'].replace(' ', '_')
-
 		# Normalise geometry field.
 		dataset['geometry'] = dataset['geometry'].apply(
 			lambda x:
@@ -253,6 +257,20 @@ class Database:
 				)
 		)
 
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = \
+			dataset['location_address_region'].apply(
+				lambda x:
+					self.us_states[x] if x in self.us_states.keys()
+					else x
+			)
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['location_address_locality']
+
 	# Process 'county_health_rankings' dataset
 	def process_county_health_rankings(self, dataset):
 		'''
@@ -264,6 +282,17 @@ class Database:
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
+		# Add state
+		dataset['iso_level_2'] = \
+			dataset['state'].apply(
+				lambda x: self.us_states[x]
+				if x in self.us_states.keys()
+				else x
+			)
+
+		# Add county
+		dataset['iso_level_3'] = dataset['county']
+
 	# Process 'canada_open_data_working_group' dataset
 	def process_canada_open_data_working_group(self, dataset):
 		'''
@@ -272,9 +301,6 @@ class Database:
 
 		:param dataset: Dataset to process
 		'''
-
-		# Add country.
-		dataset['iso_level_1'] = 'CAN'
 
 		# Drop case_id
 		dataset.drop('case_id', axis=1, inplace=True)
@@ -298,6 +324,15 @@ class Database:
 					)
 			)
 
+		# Add country.
+		dataset['iso_level_1'] = 'CAN'
+
+		# Add province
+		dataset['iso_level_2'] = dataset['province']
+
+		# Add county
+		dataset['iso_level_3'] = dataset['health_region']
+
 	# Process 'covid_tracker_canada' dataset
 	def process_covid_tracker_canada(self, dataset):
 		'''
@@ -307,15 +342,21 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Add country.
-		dataset['iso_level_1'] = 'CAN'
-
 		# Set record key
 		dataset['_key'] = dataset['id'].apply(str)
 
 		# Normalise confirmed_presumptive
 		dataset['confirmed_presumptive'] = dataset['confirmed_presumptive'] \
 			.apply(lambda x: True if x == 'CONFIRMED' else False)
+
+		# Add country.
+		dataset['iso_level_1'] = 'CAN'
+
+		# Add province
+		dataset['iso_level_2'] = dataset['province']
+
+		# Add county
+		dataset['iso_level_3'] = dataset['city']
 
 	# Process 'covid_sources_for_counties' dataset
 	def process_covid_sources_for_counties(self, dataset):
@@ -326,20 +367,26 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Add country.
-		dataset['iso_level_1'] = 'USA'
-
 		# Set record key
 		dataset['_key'] = dataset.apply(
 			lambda x: '-'.join(
 				[
-					x['iso_level_1'],
+					'USA',
 					x['state'],
 					x['county'].replace(' ', '_')
 				]
 			),
 			axis=1
 		)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add province
+		dataset['iso_level_2'] = dataset['state']
+
+		# Add county
+		dataset['iso_level_3'] = dataset['county']
 
 	# Process 'covid_sources_for_states' dataset
 	def process_covid_sources_for_states(self, dataset):
@@ -349,9 +396,6 @@ class Database:
 
 		:param dataset: Dataset to process
 		'''
-
-		# Add country.
-		dataset['iso_level_1'] = 'USA'
 
 		# Set `pum` to boolean
 		dataset['pum'] = dataset['pum'].apply(
@@ -367,12 +411,18 @@ class Database:
 		dataset['_key'] = dataset.apply(
 			lambda x: '-'.join(
 				[
-					x['iso_level_1'],
+					'USA',
 					x['state']
 				]
 			),
 			axis=1
 		)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add province
+		dataset['iso_level_2'] = dataset['state']
 
 	# Process 'covid_statistics_for_states_daily' dataset
 	def process_covid_statistics_for_states_daily(self, dataset):
@@ -382,11 +432,14 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
+		# Set record key
+		dataset['_key'] = dataset['hash']
+
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
-		# Set record key
-		dataset['_key'] = dataset['hash']
+		# Add province
+		dataset['iso_level_2'] = dataset['state']
 
 	# Process 'ecdc_worldwide' dataset
 	def process_ecdc_worldwide(self, dataset):
