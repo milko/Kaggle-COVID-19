@@ -6,6 +6,7 @@
 
 # Import libraries.
 import re
+import numpy as np
 import pandas as pd
 from arango import ArangoClient
 
@@ -19,7 +20,11 @@ class Database:
 		'coders_against_covid', 'county_health_rankings',
 		'canada_open_data_working_group', 'covid_tracker_canada',
 		'covid_sources_for_counties', 'covid_sources_for_states',
-		'covid_statistics_for_states_daily', 'ecdc_worldwide'
+		'covid_statistics_for_states_daily', 'ecdc_worldwide',
+		'cdcs_social_vulnerability_index_tract_level',
+		'cdcs_social_vulnerability_index_county_level',
+		'cdphe_health_facilities', 'coronavirus-world-airport-impacts',
+		'definitive_healthcare_usa_hospital_beds'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -138,20 +143,37 @@ class Database:
 
 			# Save columns to index.
 			if not done_index:
+				columns = set()
+
+				# Handle existing columns.
+				if not do_clear:
+					if self.ix.has(name):
+						temp = collection.get(name)
+						if temp is not None:
+							columns = set(temp['columns'])
+
+				# Update columns
+				columns.update(df.columns)
+
+				# Has index
 				if self.ix.has(name):
 					self.ix.update(dict(
 						_key=name,
 						file=file,
 						collection=col_name,
-						columns=list(df.columns)
+						columns=list(list(columns))
 					))
+
+				# Has no index
 				else:
 					self.ix.insert(dict(
 						_key=name,
 						file=file,
 						collection=col_name,
-						columns=list(df.columns)
+						columns=list(list(columns))
 					))
+
+				done_index = True
 
 			# Process the dataset
 			if name in self.known_datasets_:
@@ -186,6 +208,10 @@ class Database:
 			return 'covid_tracking_project_sources'
 		elif name == 'covid_statistics_for_states_daily':
 			return 'covid_tracking_project_data'
+		elif name == 'cdcs_social_vulnerability_index_tract_level':
+			return 'cdcs_social_vulnerability_index'
+		elif name == 'cdcs_social_vulnerability_index_county_level':
+			return 'cdcs_social_vulnerability_index'
 		else:
 			return name													# ==>
 
@@ -215,6 +241,10 @@ class Database:
 			self.process_covid_statistics_for_states_daily(dataset)
 		elif name == 'ecdc_worldwide':
 			self.process_ecdc_worldwide(dataset)
+		elif name == 'ecdc_worldwide':
+			self.process_ecdc_worldwide(dataset)
+		elif name == 'cdcs_social_vulnerability_index_tract_level':
+			self.process_cdcs_social_vulnerability_index_tract_level(dataset)
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset):
@@ -451,3 +481,40 @@ class Database:
 
 		# Add country.
 		dataset['iso_level_1'] = dataset['countryterritorycode']
+
+	# Process 'cdcs_social_vulnerability_index_tract_level' dataset
+	def process_cdcs_social_vulnerability_index_tract_level(self, dataset):
+		'''
+		Set `iso_level_1` field to `countryterritorycode`.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise GeoJSON geometry
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else dict(
+					type='Polygon',
+					coordinates=np.array(
+						list(
+							map(
+								lambda x: x.split(' '),
+								x.replace('POLYGON ((', '').replace('))', '').split(', ')
+							)
+						)
+					).astype(np.float)
+				)
+		)
+
+		# Add dataset type.
+		dataset['dataset_type'] = 'TRACT'
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add province
+		dataset['iso_level_2'] = dataset['st_abbr']
+
+		# Add county
+		dataset['iso_level_3'] = dataset['county']
