@@ -16,6 +16,8 @@ class Database:
 	# Static members
 	chunk_size_ = 1000
 	index_name_ = 'index'
+	pat_sep = re.compile('[,][ ]?')
+	pat_grp = re.compile('(((([-]?\d+\.\d+) ([-]?\d+\.\d+))[, ]?)+[, ]?)+')
 	known_datasets_ = [
 		'coders_against_covid', 'county_health_rankings',
 		'canada_open_data_working_group', 'covid_tracker_canada',
@@ -192,6 +194,59 @@ class Database:
 		# Return record count.
 		return collection.count()										# ==>
 
+	# Parse geometries
+	def parse_geometries(self, geometry):
+		'''
+		Process the provided geometry and return in GeoJSON format.
+		Supports POINT and POLYGON
+
+		:param geometry: str, The geometry in the dataset.
+		:return: dict, GeoJSON geometry.
+		'''
+
+		# Get type
+		parts = geometry.split(' ', 1)
+
+		# Parse Points
+		if parts[0] == 'POINT':
+			return dict(
+				type = 'Point',
+				coordinates = list(
+					np.array(
+						re.search(self.pat_grp, parts[1]).group(0).split()
+					).astype(np.float)
+				)
+			)
+
+		# Parse polygons
+		elif parts[0] == 'POLYGON':
+			return dict(
+				type = 'Polygon',
+				coordinates = [
+					[
+						list(
+							np.array(y.split()).astype(np.float)
+						)
+						for y in x
+					]
+					for x in
+					[
+						re.split(self.pat_sep, y) for y in
+						[
+							x.group(0) for x in
+							re.finditer(
+								self.pat_grp,
+								parts[1]
+							)
+						]
+					]
+				]
+			)
+
+		# Fail on other shapes
+		else:
+			raise Exception("Unsupported shape: {}".format(parts[0]))
+
 	# Select collection
 	def select_collection(self, name):
 		'''
@@ -278,14 +333,22 @@ class Database:
 		dataset['geometry'] = dataset['geometry'].apply(
 			lambda x:
 				None if pd.isna(x)
-				else dict(
-					type='Point',
-					coordinates=[
-						float(re.search('POINT \((.+) (.+)\)', x).group(1)),
-						float(re.search('POINT \((.+) (.+)\)', x).group(2))
-					]
-				)
+				else self.parse_geometries(x)
 		)
+
+		# pattern = re.compile('POINT \((.+) (.+)\)')
+		# pattern = re.compile('POINT \(([-]?\d+\.\d+) ([-]?\d+\.\d+)\)')
+		# dataset['geometry'] = dataset['geometry'].apply(
+		# 	lambda x:
+		# 		None if pd.isna(x)
+		# 		else dict(
+		# 			type='Point',
+		# 			coordinates=[
+		# 				float(re.search(pattern, x).group(1)),
+		# 				float(re.search(pattern, x).group(2))
+		# 			]
+		# 		)
+		# )
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -490,21 +553,28 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
+		# Normalise boolean fields.
+		bool_fields = [
+			'f_pov', 'f_nohsdp', 'f_age65', 'f_age17', 'f_disabl',
+			'f_sngpnt','f_minrty', 'f_limeng', 'f_munit', 'f_mobile',
+			'f_crowd', 'f_noveh', 'f_groupq'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't'
+					else (
+						False if x == 'f'
+						else None
+					)
+			)
+
 		# Normalise GeoJSON geometry
 		dataset['geometry'] = dataset['geometry'].apply(
 			lambda x:
 				None if pd.isna(x)
-				else dict(
-					type='Polygon',
-					coordinates=np.array(
-						list(
-							map(
-								lambda x: x.split(' '),
-								x.replace('POLYGON ((', '').replace('))', '').split(', ')
-							)
-						)
-					).astype(np.float)
-				)
+				else self.parse_geometries(x)
 		)
 
 		# Add dataset type.
