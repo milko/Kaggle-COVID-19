@@ -25,7 +25,7 @@ class Database:
 		'covid_statistics_for_states_daily', 'ecdc_worldwide',
 		'cdcs_social_vulnerability_index_tract_level',
 		'cdcs_social_vulnerability_index_county_level',
-		'cdphe_health_facilities', 'coronavirus-world-airport-impacts',
+		'cdphe_health_facilities', 'coronavirus_world_airport_impacts',
 		'definitive_healthcare_usa_hospital_beds'
 	]
 	us_states = {
@@ -88,6 +88,21 @@ class Database:
 		'Palau': 'PW',
 		'Puerto Rico': 'PR',
 		'Virgin Islands': 'VI'
+	}
+	cn_states = {
+		'Newfoundland and Labrador': 'NL',
+		'Prince Edward Island': 'PE',
+		'Nova Scotia': 'NS',
+		'New Brunswick': 'NB',
+		'Quebec': 'QC',
+		'Ontario': 'ON',
+		'Manitoba': 'MB',
+		'Saskatchewan': 'SK',
+		'Alberta': 'AB',
+		'British Columbia': 'BC',
+		'Yukon': 'YT',
+		'Northwest Territories': 'NT',
+		'Nunavut': 'NU'
 	}
 
 	# Instantiate object
@@ -264,9 +279,9 @@ class Database:
 		elif name == 'covid_statistics_for_states_daily':
 			return 'covid_tracking_project_data'
 		elif name == 'cdcs_social_vulnerability_index_tract_level':
-			return 'cdcs_social_vulnerability_index'
+			return 'cdcs_social_vulnerability_index_tract'
 		elif name == 'cdcs_social_vulnerability_index_county_level':
-			return 'cdcs_social_vulnerability_index'
+			return 'cdcs_social_vulnerability_index_county'
 		else:
 			return name													# ==>
 
@@ -300,6 +315,14 @@ class Database:
 			self.process_ecdc_worldwide(dataset)
 		elif name == 'cdcs_social_vulnerability_index_tract_level':
 			self.process_cdcs_social_vulnerability_index_tract_level(dataset)
+		elif name == 'cdcs_social_vulnerability_index_county_level':
+			self.process_cdcs_social_vulnerability_index_county_level(dataset)
+		elif name == 'cdphe_health_facilities':
+			self.process_cdphe_health_facilities(dataset)
+		elif name == 'coronavirus_world_airport_impacts':
+			self.process_coronavirus_world_airport_impacts(dataset)
+		elif name == 'definitive_healthcare_usa_hospital_beds':
+			self.process_definitive_healthcare_usa_hospital_beds(dataset)
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset):
@@ -336,19 +359,8 @@ class Database:
 				else self.parse_geometries(x)
 		)
 
-		# pattern = re.compile('POINT \((.+) (.+)\)')
-		# pattern = re.compile('POINT \(([-]?\d+\.\d+) ([-]?\d+\.\d+)\)')
-		# dataset['geometry'] = dataset['geometry'].apply(
-		# 	lambda x:
-		# 		None if pd.isna(x)
-		# 		else dict(
-		# 			type='Point',
-		# 			coordinates=[
-		# 				float(re.search(pattern, x).group(1)),
-		# 				float(re.search(pattern, x).group(2))
-		# 			]
-		# 		)
-		# )
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -357,7 +369,7 @@ class Database:
 		dataset['iso_level_2'] = \
 			dataset['location_address_region'].apply(
 				lambda x:
-					self.us_states[x] if x in self.us_states.keys()
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
 					else x
 			)
 
@@ -378,9 +390,9 @@ class Database:
 		# Add state
 		dataset['iso_level_2'] = \
 			dataset['state'].apply(
-				lambda x: self.us_states[x]
-				if x in self.us_states.keys()
-				else x
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
 			)
 
 		# Add county
@@ -397,6 +409,9 @@ class Database:
 
 		# Drop case_id
 		dataset.drop('case_id', axis=1, inplace=True)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
 
 		# Normalise sex
 		dataset['sex_male'] = dataset['sex'][dataset['sex'] != 'Not Reported'] \
@@ -421,7 +436,12 @@ class Database:
 		dataset['iso_level_1'] = 'CAN'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['province']
+		dataset['iso_level_2'] = \
+			dataset['province'].apply(
+				lambda x:
+					'CAN-{}'.format(self.cn_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 		# Add county
 		dataset['iso_level_3'] = dataset['health_region']
@@ -442,11 +462,19 @@ class Database:
 		dataset['confirmed_presumptive'] = dataset['confirmed_presumptive'] \
 			.apply(lambda x: True if x == 'CONFIRMED' else False)
 
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
 		# Add country.
 		dataset['iso_level_1'] = 'CAN'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['province']
+		dataset['iso_level_2'] = \
+			dataset['province'].apply(
+				lambda x:
+					'CAN-{}'.format(self.cn_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 		# Add county
 		dataset['iso_level_3'] = dataset['city']
@@ -472,11 +500,19 @@ class Database:
 			axis=1
 		)
 
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['state']
+		dataset['iso_level_2'] = \
+			dataset['state'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
@@ -511,11 +547,19 @@ class Database:
 			axis=1
 		)
 
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['state']
+		dataset['iso_level_2'] = \
+			dataset['state'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 	# Process 'covid_statistics_for_states_daily' dataset
 	def process_covid_statistics_for_states_daily(self, dataset):
@@ -528,11 +572,19 @@ class Database:
 		# Set record key
 		dataset['_key'] = dataset['hash']
 
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['state']
+		dataset['iso_level_2'] = \
+			dataset['state'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 	# Process 'ecdc_worldwide' dataset
 	def process_ecdc_worldwide(self, dataset):
@@ -542,13 +594,18 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
 		# Add country.
 		dataset['iso_level_1'] = dataset['countryterritorycode']
 
 	# Process 'cdcs_social_vulnerability_index_tract_level' dataset
 	def process_cdcs_social_vulnerability_index_tract_level(self, dataset):
 		'''
-		Set `iso_level_1` field to `countryterritorycode`.
+		Set `iso_level_1` to 'USA',
+		`iso_level_2` to `st_abbr`, iso_level_3` to `county`, normalise t/f
+		boolean fields and convert geometry to GeoJSON format.
 
 		:param dataset: Dataset to process
 		'''
@@ -577,14 +634,201 @@ class Database:
 				else self.parse_geometries(x)
 		)
 
-		# Add dataset type.
-		dataset['dataset_type'] = 'TRACT'
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
 		# Add province
-		dataset['iso_level_2'] = dataset['st_abbr']
+		dataset['iso_level_2'] = \
+			dataset['st_abbr'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
 
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
+
+	# Process 'cdcs_social_vulnerability_index_county_level' dataset
+	def process_cdcs_social_vulnerability_index_county_level(self, dataset):
+		'''
+		Set `iso_level_1` to 'USA',
+		`iso_level_2` to `st_abbr`, iso_level_3` to `county`, normalise t/f
+		boolean fields and convert geometry to GeoJSON format.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'f_pov', 'f_unemp', 'f_pci', 'f_nohsdp', 'f_theme1',
+			'f_age65', 'f_age17', 'f_disabl', 'f_sngpnt', 'f_theme2',
+			'f_minrty', 'f_limeng', 'f_theme3', 'f_munit', 'f_mobile',
+			'f_crowd', 'f_noveh', 'f_groupq', 'f_theme4', 'f_total'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't'
+					else (
+						False if x == 'f'
+						else None
+					)
+			)
+
+		# Normalise GeoJSON geometry
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add province
+		dataset['iso_level_2'] = \
+			dataset['st_abbr'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
+
+		# Add county
+		dataset['iso_level_3'] = dataset['county']
+
+	# Process 'cdphe_health_facilities' dataset
+	def process_cdphe_health_facilities(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'medicare', 'medicaid'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't'
+					else (
+						False if x == 'f'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = \
+			dataset['state'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'coronavirus_world_airport_impacts' dataset
+	def process_coronavirus_world_airport_impacts(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format, set key field to `ident` and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'scheduled'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 'yes'
+					else (
+						False if x == 'no'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['iso_countr']
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['iso_region']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['municipali']
+
+	# Process 'definitive_healthcare_usa_hospital_beds' dataset
+	def process_definitive_healthcare_usa_hospital_beds(self, dataset):
+		'''
+		Normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = \
+			dataset['hq_state'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else x
+			)
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county_nam']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['hq_city']
