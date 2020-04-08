@@ -859,15 +859,16 @@ class Database:
 		:param file: Dataset file path
 		'''
 
-		# Init counters
+		# Init globals
 		record_count = 0
+		col_name_border = 'border_ports'
+		col_name_wait_times = 'border_times'
 
 		# Get/create collection
-		col_name = 'usa_canada_borders'
-		if self.db.has_collection(col_name):
-			collection = self.db.collection(col_name)
+		if self.db.has_collection(col_name_border):
+			collection = self.db.collection(col_name_border)
 		else:
-			collection = self.db.create_collection(col_name, edge=False)
+			collection = self.db.create_collection(col_name_border, edge=False)
 
 		# Truncate collection
 		collection.truncate()
@@ -878,11 +879,13 @@ class Database:
 		# Border columns
 		can_columns = [
 			'borderid', 'canadaport', 'canadaborderzone',
-			'can_iso_3166_2', 'borderlatitude', 'borderlongitude'
+			'can_iso_3166_2', 'borderlatitude', 'borderlongitude',
+			'bordergeohash', 'version'
 		]
 		usa_columns = [
 			'borderid', 'americaport', 'americaborderzone',
-			'us_iso_3166_2', 'borderlatitude', 'borderlongitude'
+			'us_iso_3166_2', 'borderlatitude', 'borderlongitude',
+			'bordergeohash', 'version'
 		]
 
 		# Init border dataset
@@ -893,7 +896,8 @@ class Database:
 			group = df[df['borderid'] == borderid].iloc[0][can_columns].copy()
 			group['port'] = group['canadaport']
 			group['geometry'] = group['canadaborderzone']
-			group['border_ref'] = 'CAN-{}'.format(borderid)
+			group['border_ref'] = 'BORDER-CAN-{}'.format(borderid)
+			group['_key'] = group['border_ref']
 			group['iso_level_1'] = 'CAN'
 			group['iso_level_2'] = group['can_iso_3166_2']
 			borders = borders.append(group, ignore_index=True)
@@ -901,7 +905,8 @@ class Database:
 			group = df[df['borderid'] == borderid].iloc[0][usa_columns].copy()
 			group['port'] = group['americaport']
 			group['geometry'] = group['americaborderzone']
-			group['border_ref'] = 'USA-{}'.format(borderid)
+			group['border_ref'] = 'BORDER-USA-{}'.format(borderid)
+			group['_key'] = group['border_ref']
 			group['iso_level_1'] = 'USA'
 			group['iso_level_2'] = group['us_iso_3166_2']
 			borders = borders.append(group, ignore_index=True)
@@ -924,6 +929,25 @@ class Database:
 		borders['_dataset_has_shape'] = True
 		borders['_dataset_item_type'] = 'Border Portal'
 
+		# Save border columns
+		columns = borders.columns
+		if self.ix.has(col_name_border):
+			self.ix.update(dict(
+				_key=col_name_border,
+				file=file,
+				collection=col_name_border,
+				columns=list(list(columns))
+			))
+
+		# Has no index
+		else:
+			self.ix.insert(dict(
+				_key=col_name_border,
+				file=file,
+				collection=col_name_border,
+				columns=list(list(columns))
+			))
+
 		# Load the border data
 		collection.import_bulk(
 			[
@@ -936,29 +960,33 @@ class Database:
 		record_count += collection.count()
 
 		# Get/create collection
-		col_name = 'usa_canada_borders_wait_times'
-		if self.db.has_collection(col_name):
-			collection = self.db.collection(col_name)
+		if self.db.has_collection(col_name_wait_times):
+			collection = self.db.collection(col_name_wait_times)
 		else:
-			collection = self.db.create_collection(col_name, edge=False)
+			collection = self.db.create_collection(col_name_wait_times, edge=True)
 
 		# Truncate collection
 		collection.truncate()
 
 		# Columns to drop
 		drop_columns = [
-				'americaport', 'canadaport', 'canadaborderzone',
-				'can_iso_3166_2', 'americaborderzone', 'us_iso_3166_2'
-			]
+			'canadaport', 'americaport', 'tripdirection',
+			'canadaborderzone', 'can_iso_3166_2',
+			'americaborderzone', 'us_iso_3166_2',
+			'borderlatitude', 'borderlongitude',
+			'bordergeohash', 'version'
+		]
 
 		# Handle canada waiting times
 		group = group = df[df['tripdirection'] == 'Canada to US'].copy()
-		group['port'] = group['canadaport']
-		group['border_ref'] = \
-			group['borderid'].apply(lambda x: 'CAN-{}'.format(x))
-		group['iso_level_1'] = 'CAN'
-		group['iso_level_2'] = group['can_iso_3166_2']
-		group['_dataset_has_shape'] = False
+		group['_from'] = \
+			group['borderid'].apply(
+				lambda x: '{}/BORDER-CAN-{}'.format(col_name_border, x)
+			)
+		group['_to'] = \
+			group['borderid'].apply(
+				lambda x: '{}/BORDER-USA-{}'.format(col_name_border, x)
+			)
 		group.drop(
 			columns=drop_columns,
 			inplace=True
@@ -977,16 +1005,37 @@ class Database:
 
 		# Handle usa waiting times
 		group = group = df[df['tripdirection'] == 'US to Canada'].copy()
-		group['port'] = group['americaport']
-		group['border_ref'] = \
-			group['borderid'].apply(lambda x: 'USA-{}'.format(x))
-		group['iso_level_1'] = 'USA'
-		group['iso_level_2'] = group['us_iso_3166_2']
-		group['_dataset_has_shape'] = False
+		group['_from'] = \
+			group['borderid'].apply(
+				lambda x: '{}/USA-{}'.format(col_name_border, x)
+			)
+		group['_to'] = \
+			group['borderid'].apply(
+				lambda x: '{}/CAN-{}'.format(col_name_border, x)
+			)
 		group.drop(
 			columns=drop_columns,
 			inplace=True
 		)
+
+		# Save border columns
+		columns = group.columns
+		if self.ix.has(col_name_wait_times):
+			self.ix.update(dict(
+				_key=col_name_wait_times,
+				file=file,
+				collection=col_name_wait_times,
+				columns=list(list(columns))
+			))
+
+		# Has no index
+		else:
+			self.ix.insert(dict(
+				_key=col_name_wait_times,
+				file=file,
+				collection=col_name_wait_times,
+				columns=list(list(columns))
+			))
 
 		# Load the border data
 		collection.import_bulk(
