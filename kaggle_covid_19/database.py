@@ -34,7 +34,18 @@ class Database:
 		'github_spain_regions',
 		'harvard_global_health_institute_20',
 		'harvard_global_health_institute_40',
-		'harvard_global_health_institute_60'
+		'harvard_global_health_institute_60',
+		'hde_acaps_government_measures',
+		'hde_global_school_closures',
+		'hde_inform_covid_indicators',
+		'hde_total_covid_tests',
+		'hifld_aircraft_landing_facilities',
+		'hifld_hospitals',
+		'hifld_local_emergency_operations_centers',
+		'hifld_nursing_homes',
+		'hifld_public_health_departments',
+		'hifld_urgent_care_facilities',
+		'hifld_us_ports_of_entry'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -358,6 +369,28 @@ class Database:
 			self.process_harvard_global_health_institute_40(dataset)
 		elif name == 'harvard_global_health_institute_60':
 			self.process_harvard_global_health_institute_60(dataset)
+		elif name == 'hde_acaps_government_measures':
+			self.process_hde_acaps_government_measures(dataset)
+		elif name == 'hde_global_school_closures':
+			self.process_hde_global_school_closures(dataset)
+		elif name == 'hde_inform_covid_indicators':
+			self.process_hde_inform_covid_indicators(dataset)
+		elif name == 'hde_total_covid_tests':
+			self.process_hde_total_covid_tests(dataset)
+		elif name == 'hifld_aircraft_landing_facilities':
+			self.process_hifld_aircraft_landing_facilities(dataset)
+		elif name == 'hifld_hospitals':
+			self.process_hifld_hospitals(dataset)
+		elif name == 'hifld_local_emergency_operations_centers':
+			self.process_hifld_local_emergency_operations_centers(dataset)
+		elif name == 'hifld_nursing_homes':
+			self.process_hifld_nursing_homes(dataset)
+		elif name == 'hifld_public_health_departments':
+			self.process_hifld_public_health_departments(dataset)
+		elif name == 'hifld_urgent_care_facilities':
+			self.process_hifld_urgent_care_facilities(dataset)
+		elif name == 'hifld_us_ports_of_entry':
+			self.process_hifld_us_ports_of_entry(dataset)
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset):
@@ -400,7 +433,7 @@ class Database:
 			dataset['location_place_of_service_type'].apply(
 				lambda x:
 					None if x is None
-					else x
+					else x.upper()
 		)
 
 		# Add country.
@@ -677,7 +710,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
-		dataset['_dataset_item_type'] = 'Tract'
+		dataset['_dataset_item_type'] = 'TRACT'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -730,7 +763,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
-		dataset['_dataset_item_type'] = 'County'
+		dataset['_dataset_item_type'] = 'COUNTY'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -779,7 +812,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
-		dataset['_dataset_item_type'] = 'Health Facility'
+		dataset['_dataset_item_type'] = 'HEALTH FACILITY'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -831,7 +864,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
-		dataset['_dataset_item_type'] = 'Airport'
+		dataset['_dataset_item_type'] = 'AIRPORT'
 
 		# Add country.
 		dataset['iso_level_1'] = dataset['iso_countr']
@@ -860,7 +893,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
-		dataset['_dataset_item_type'] = 'Hospital'
+		dataset['_dataset_item_type'] = 'HOSPITAL'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -976,6 +1009,442 @@ class Database:
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = False
 
+	# Process 'hde_acaps_government_measures' dataset
+	def process_hde_acaps_government_measures(self, dataset):
+		'''
+		Load as-is and normalise booleans.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'targeted_pop_group'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't'
+					else (
+						False if x == 'f'
+						else None
+					)
+			)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'hde_global_school_closures' dataset
+	def process_hde_global_school_closures(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'hde_inform_covid_indicators' dataset
+	def process_hde_inform_covid_indicators(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'hde_total_covid_tests' dataset
+	def process_hde_total_covid_tests(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'hifld_aircraft_landing_facilities' dataset
+	def process_hifld_aircraft_landing_facilities(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'tieinfss', 'notamservi', 'customsair', 'customslan',
+			'militaryjo', 'militaryla', 'atct', 'noncommerc',
+			'medicaluse'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = dataset['type'].str.upper()
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_hospitals' dataset
+	def process_hifld_hospitals(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'helipad'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES' or x == 'H'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = dataset['type'].str.upper()
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['country']
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_local_emergency_operations_centers' dataset
+	def process_hifld_local_emergency_operations_centers(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'phoneloc', 'generator', 'basement', 'permanent'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'EMERGENCY OPERATIONS CENTER'
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_nursing_homes' dataset
+	def process_hifld_nursing_homes(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = dataset['type'].str.upper()
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['country']
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_public_health_departments' dataset
+	def process_hifld_public_health_departments(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'sdr', 'phoneloc'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'PUBLIC HEALTH DEPARTMENT'
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_urgent_care_facilities' dataset
+	def process_hifld_urgent_care_facilities(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'phoneloc'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'URGENT CARE FACILITY'
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
+	# Process 'hifld_us_ports_of_entry' dataset
+	def process_hifld_us_ports_of_entry(self, dataset):
+		'''
+		Process t/f fields into booleans, normalise `geometry` field
+		into GeoJSON format and add ISO fields.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Rename columns
+		columns = map(
+			lambda x:
+				x[2:] if x[:2] == 'x_'
+				else x,
+			list(dataset.columns)
+		)
+		rename = dict()
+		for name in columns:
+			rename['x_{}'.format(name)] = name
+		dataset.rename(columns=rename, inplace=True)
+
+		# Set not available
+		dataset.replace(
+			to_replace='NOT AVAILABLE',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise boolean fields.
+		bool_fields = [
+			'phoneloc'
+		]
+
+		for field in bool_fields:
+			dataset[field] = dataset[field].apply(
+				lambda x:
+					True if x == 't' or x == 'Y' or x == 'YES'
+					else (
+						False if x == 'f' or x == 'N' or x == 'NO'
+						else None
+					)
+			)
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'PORT OF ENTRY'
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Copy to iso level 2
+		dataset['iso_level_2'] = dataset['state']
+
+		# Copy to iso level 3
+		dataset['iso_level_3'] = dataset['county']
+
+		# Copy to iso level 4
+		dataset['iso_level_4'] = dataset['city']
+
 	# Process 'border_wait_times_at_us_canada_border' dataset
 	def process_border_wait_times_at_us_canada_border(self, file):
 		'''
@@ -1052,7 +1521,7 @@ class Database:
 
 		# Indicate has shape
 		borders['_dataset_has_shape'] = True
-		borders['_dataset_item_type'] = 'Border Portal'
+		borders['_dataset_item_type'] = 'PORT OF ENTRY'
 
 		# Save border columns
 		columns = borders.columns
