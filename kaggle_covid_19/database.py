@@ -16,6 +16,7 @@ class Database:
 	# Static members
 	chunk_size_ = 1000
 	index_name_ = 'index'
+	shape_name_ = 'shapes'
 	pat_sep = re.compile('[,][ ]?')
 	pat_grp = re.compile('(((([-]?\d+\.\d+) ([-]?\d+\.\d+))[, ]?)+[, ]?)+')
 	known_datasets_ = [
@@ -26,7 +27,8 @@ class Database:
 		'cdcs_social_vulnerability_index_tract_level',
 		'cdcs_social_vulnerability_index_county_level',
 		'cdphe_health_facilities', 'coronavirus_world_airport_impacts',
-		'definitive_healthcare_usa_hospital_beds'
+		'definitive_healthcare_usa_hospital_beds',
+		'border_wait_times_at_us_canada_border'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -141,6 +143,11 @@ class Database:
 		:param name: Dataset name, becomes collection name.
 		:return: int, number of rows.
 		'''
+
+		# Intercept border waiting times
+		if name == 'border_wait_times_at_us_canada_border':
+			return \
+				self.process_border_wait_times_at_us_canada_border(file)# ==>
 
 		# Get/create collection
 		col_name = self.select_collection(name)
@@ -361,6 +368,12 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = \
+			dataset['location_place_of_service_type'].apply(
+				lambda x:
+					None if x is None
+					else x
+		)
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -636,6 +649,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'Tract'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -688,6 +702,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'County'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -736,6 +751,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'Health Facility'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -787,6 +803,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'Airport'
 
 		# Add country.
 		dataset['iso_level_1'] = dataset['iso_countr']
@@ -815,6 +832,7 @@ class Database:
 
 		# Indicate has shape
 		dataset['_dataset_has_shape'] = True
+		dataset['_dataset_item_type'] = 'Hospital'
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -832,3 +850,153 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['hq_city']
+
+	# Process 'border_wait_times_at_us_canada_border' dataset
+	def process_border_wait_times_at_us_canada_border(self, file):
+		'''
+		Normalise `geometry` fields.
+
+		:param file: Dataset file path
+		'''
+
+		# Init counters
+		record_count = 0
+
+		# Get/create collection
+		col_name = 'usa_canada_borders'
+		if self.db.has_collection(col_name):
+			collection = self.db.collection(col_name)
+		else:
+			collection = self.db.create_collection(col_name, edge=False)
+
+		# Truncate collection
+		collection.truncate()
+
+		# Read dataset
+		df = pd.read_csv(file)
+
+		# Border columns
+		can_columns = [
+			'borderid', 'canadaport', 'canadaborderzone',
+			'can_iso_3166_2', 'borderlatitude', 'borderlongitude'
+		]
+		usa_columns = [
+			'borderid', 'americaport', 'americaborderzone',
+			'us_iso_3166_2', 'borderlatitude', 'borderlongitude'
+		]
+
+		# Init border dataset
+		borders = pd.DataFrame()
+
+		# Create borders dataset
+		for borderid in df['borderid'].unique():
+			group = df[df['borderid'] == borderid].iloc[0][can_columns].copy()
+			group['port'] = group['canadaport']
+			group['geometry'] = group['canadaborderzone']
+			group['border_ref'] = 'CAN-{}'.format(borderid)
+			group['iso_level_1'] = 'CAN'
+			group['iso_level_2'] = group['can_iso_3166_2']
+			borders = borders.append(group, ignore_index=True)
+
+			group = df[df['borderid'] == borderid].iloc[0][usa_columns].copy()
+			group['port'] = group['americaport']
+			group['geometry'] = group['americaborderzone']
+			group['border_ref'] = 'USA-{}'.format(borderid)
+			group['iso_level_1'] = 'USA'
+			group['iso_level_2'] = group['us_iso_3166_2']
+			borders = borders.append(group, ignore_index=True)
+
+		# Remove specific geometry columns
+		borders.drop(
+			columns=[
+				'canadaport', 'americaport',
+				'can_iso_3166_2', 'us_iso_3166_2',
+				'canadaborderzone', 'americaborderzone'
+			],
+			inplace=True)
+
+		# Normalise geometry field.
+		borders['geometry'] = borders['geometry'].apply(
+			lambda x: self.parse_geometries(x)
+		)
+
+		# Indicate has shape
+		borders['_dataset_has_shape'] = True
+		borders['_dataset_item_type'] = 'Border Portal'
+
+		# Load the border data
+		collection.import_bulk(
+			[
+				{k: v for k, v in m.items() if pd.notnull(v)}
+				for m in borders.to_dict(orient='rows')
+			],
+			on_duplicate='error',
+			sync=True
+		)
+		record_count += collection.count()
+
+		# Get/create collection
+		col_name = 'usa_canada_borders_wait_times'
+		if self.db.has_collection(col_name):
+			collection = self.db.collection(col_name)
+		else:
+			collection = self.db.create_collection(col_name, edge=False)
+
+		# Truncate collection
+		collection.truncate()
+
+		# Columns to drop
+		drop_columns = [
+				'americaport', 'canadaport', 'canadaborderzone',
+				'can_iso_3166_2', 'americaborderzone', 'us_iso_3166_2'
+			]
+
+		# Handle canada waiting times
+		group = group = df[df['tripdirection'] == 'Canada to US'].copy()
+		group['port'] = group['canadaport']
+		group['border_ref'] = \
+			group['borderid'].apply(lambda x: 'CAN-{}'.format(x))
+		group['iso_level_1'] = 'CAN'
+		group['iso_level_2'] = group['can_iso_3166_2']
+		group['_dataset_has_shape'] = False
+		group.drop(
+			columns=drop_columns,
+			inplace=True
+		)
+
+		# Load the border data
+		collection.import_bulk(
+			[
+				{k: v for k, v in m.items() if pd.notnull(v)}
+				for m in group.to_dict(orient='rows')
+			],
+			on_duplicate='error',
+			sync=True
+		)
+		record_count += collection.count()
+
+		# Handle usa waiting times
+		group = group = df[df['tripdirection'] == 'US to Canada'].copy()
+		group['port'] = group['americaport']
+		group['border_ref'] = \
+			group['borderid'].apply(lambda x: 'USA-{}'.format(x))
+		group['iso_level_1'] = 'USA'
+		group['iso_level_2'] = group['us_iso_3166_2']
+		group['_dataset_has_shape'] = False
+		group.drop(
+			columns=drop_columns,
+			inplace=True
+		)
+
+		# Load the border data
+		collection.import_bulk(
+			[
+				{k: v for k, v in m.items() if pd.notnull(v)}
+				for m in group.to_dict(orient='rows')
+			],
+			on_duplicate='error',
+			sync=True
+		)
+		record_count += collection.count()
+
+		return record_count												# ==>
