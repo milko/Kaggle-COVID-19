@@ -202,7 +202,8 @@ class Database:
 						_key=name,
 						file=file,
 						collection=col_name,
-						columns=list(list(columns))
+						columns=list(list(columns)),
+						has_shape=self.dataset_has_shape(name)
 					))
 
 				# Has no index
@@ -211,7 +212,8 @@ class Database:
 						_key=name,
 						file=file,
 						collection=col_name,
-						columns=list(list(columns))
+						columns=list(list(columns)),
+						has_shape=self.dataset_has_shape(name)
 					))
 
 				done_index = True
@@ -341,8 +343,6 @@ class Database:
 			self.process_covid_statistics_for_states_daily(dataset)
 		elif name == 'ecdc_worldwide':
 			self.process_ecdc_worldwide(dataset)
-		elif name == 'ecdc_worldwide':
-			self.process_ecdc_worldwide(dataset)
 		elif name == 'cdcs_social_vulnerability_index_tract_level':
 			self.process_cdcs_social_vulnerability_index_tract_level(dataset)
 		elif name == 'cdcs_social_vulnerability_index_county_level':
@@ -391,6 +391,81 @@ class Database:
 			self.process_hifld_urgent_care_facilities(dataset)
 		elif name == 'hifld_us_ports_of_entry':
 			self.process_hifld_us_ports_of_entry(dataset)
+
+	# Check if dataset has a shape
+	def dataset_has_shape(self, name):
+		'''
+		Check if dataset has shape.
+
+		:param dataset: Pandas DataFrame
+		:param name: Dataset name/collection name
+		'''
+
+		# Parse by name
+		if name == 'coders_against_covid':
+			return True
+		elif name == 'county_health_rankings':
+			return False
+		elif name == 'canada_open_data_working_group':
+			return False
+		elif name == 'covid_tracker_canada':
+			return False
+		elif name == 'covid_sources_for_counties':
+			return False
+		elif name == 'covid_sources_for_states':
+			return False
+		elif name == 'covid_statistics_for_states_daily':
+			return False
+		elif name == 'ecdc_worldwide':
+			return False
+		elif name == 'cdcs_social_vulnerability_index_tract_level':
+			return True
+		elif name == 'cdcs_social_vulnerability_index_county_level':
+			return True
+		elif name == 'cdphe_health_facilities':
+			return True
+		elif name == 'coronavirus_world_airport_impacts':
+			return True
+		elif name == 'definitive_healthcare_usa_hospital_beds':
+			return True
+		elif name == 'github_belgium_regions':
+			return False
+		elif name == 'github_italy_regions':
+			return False
+		elif name == 'github_uk_regions':
+			return False
+		elif name == 'github_france_regions':
+			return False
+		elif name == 'github_spain_regions':
+			return False
+		elif name == 'harvard_global_health_institute_20':
+			return False
+		elif name == 'harvard_global_health_institute_40':
+			return False
+		elif name == 'harvard_global_health_institute_60':
+			return False
+		elif name == 'hde_acaps_government_measures':
+			return False
+		elif name == 'hde_global_school_closures':
+			return False
+		elif name == 'hde_inform_covid_indicators':
+			return False
+		elif name == 'hde_total_covid_tests':
+			return False
+		elif name == 'hifld_aircraft_landing_facilities':
+			return True
+		elif name == 'hifld_hospitals':
+			return True
+		elif name == 'hifld_local_emergency_operations_centers':
+			return True
+		elif name == 'hifld_nursing_homes':
+			return True
+		elif name == 'hifld_public_health_departments':
+			return True
+		elif name == 'hifld_urgent_care_facilities':
+			return True
+		elif name == 'hifld_us_ports_of_entry':
+			return True
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset):
@@ -457,6 +532,9 @@ class Database:
 
 		:param dataset: Dataset to process
 		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -1530,7 +1608,8 @@ class Database:
 				_key=col_name_border,
 				file=file,
 				collection=col_name_border,
-				columns=list(list(columns))
+				columns=list(list(columns)),
+				has_shape=True
 			))
 
 		# Has no index
@@ -1539,7 +1618,8 @@ class Database:
 				_key=col_name_border,
 				file=file,
 				collection=col_name_border,
-				columns=list(list(columns))
+				columns=list(list(columns)),
+				has_shape=True
 			))
 
 		# Load the border data
@@ -1619,7 +1699,8 @@ class Database:
 				_key=col_name_wait_times,
 				file=file,
 				collection=col_name_wait_times,
-				columns=list(list(columns))
+				columns=list(list(columns)),
+				has_shape=False
 			))
 
 		# Has no index
@@ -1628,7 +1709,8 @@ class Database:
 				_key=col_name_wait_times,
 				file=file,
 				collection=col_name_wait_times,
-				columns=list(list(columns))
+				columns=list(list(columns)),
+				has_shape=False
 			))
 
 		# Load the border data
