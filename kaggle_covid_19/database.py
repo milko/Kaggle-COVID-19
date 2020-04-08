@@ -28,7 +28,13 @@ class Database:
 		'cdcs_social_vulnerability_index_county_level',
 		'cdphe_health_facilities', 'coronavirus_world_airport_impacts',
 		'definitive_healthcare_usa_hospital_beds',
-		'border_wait_times_at_us_canada_border'
+		'border_wait_times_at_us_canada_border',
+		'github_belgium_regions', 'github_italy_regions',
+		'github_uk_regions', 'github_france_regions',
+		'github_spain_regions',
+		'harvard_global_health_institute_20',
+		'harvard_global_health_institute_40',
+		'harvard_global_health_institute_60'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -289,6 +295,12 @@ class Database:
 			return 'cdcs_social_vulnerability_index_tract'
 		elif name == 'cdcs_social_vulnerability_index_county_level':
 			return 'cdcs_social_vulnerability_index_county'
+		elif name == 'harvard_global_health_institute_20':
+			return 'harvard_global_health_institute'
+		elif name == 'harvard_global_health_institute_40':
+			return 'harvard_global_health_institute'
+		elif name == 'harvard_global_health_institute_60':
+			return 'harvard_global_health_institute'
 		else:
 			return name													# ==>
 
@@ -330,6 +342,22 @@ class Database:
 			self.process_coronavirus_world_airport_impacts(dataset)
 		elif name == 'definitive_healthcare_usa_hospital_beds':
 			self.process_definitive_healthcare_usa_hospital_beds(dataset)
+		elif name == 'github_belgium_regions':
+			self.process_github_belgium_regions(dataset)
+		elif name == 'github_italy_regions':
+			self.process_github_italy_regions(dataset)
+		elif name == 'github_uk_regions':
+			self.process_github_uk_regions(dataset)
+		elif name == 'github_france_regions':
+			self.process_github_france_regions(dataset)
+		elif name == 'github_spain_regions':
+			self.process_github_spain_regions(dataset)
+		elif name == 'harvard_global_health_institute_20':
+			self.process_harvard_global_health_institute_20(dataset)
+		elif name == 'harvard_global_health_institute_40':
+			self.process_harvard_global_health_institute_40(dataset)
+		elif name == 'harvard_global_health_institute_60':
+			self.process_harvard_global_health_institute_60(dataset)
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset):
@@ -850,6 +878,103 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['hq_city']
+
+	# Process 'github_belgium_regions' dataset
+	def process_github_belgium_regions(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'github_italy_regions' dataset
+	def process_github_italy_regions(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'github_uk_regions' dataset
+	def process_github_uk_regions(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'github_france_regions' dataset
+	def process_github_france_regions(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'github_spain_regions' dataset
+	def process_github_spain_regions(self, dataset):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'harvard_global_health_institute_20' dataset
+	def process_harvard_global_health_institute_20(self, dataset):
+		'''
+		Load as-is and add by population contracted.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add by population contracted
+		dataset['by_population_contracted'] = 20
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'harvard_global_health_institute_40' dataset
+	def process_harvard_global_health_institute_40(self, dataset):
+		'''
+		Load as-is and add by population contracted.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add by population contracted
+		dataset['by_population_contracted'] = 40
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
+
+	# Process 'harvard_global_health_institute_60' dataset
+	def process_harvard_global_health_institute_60(self, dataset):
+		'''
+		Load as-is and add by population contracted.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add by population contracted
+		dataset['by_population_contracted'] = 60
+
+		# Indicate has shape
+		dataset['_dataset_has_shape'] = False
 
 	# Process 'border_wait_times_at_us_canada_border' dataset
 	def process_border_wait_times_at_us_canada_border(self, file):
