@@ -56,7 +56,8 @@ class Database:
 		'cdc_cities_census_tract_level',
 		'cdc_global_adult_tobacco_survey', 'cdc_global_youth_tobacco_survey',
 		'cdc_behavioral_risk_factor_surveillance',
-		'cdc_chronic_disease_indicators'
+		'cdc_chronic_disease_indicators',
+		'usafacts_covid_19_by_county'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -203,6 +204,63 @@ class Database:
 						pd.read_csv(item),
 						how='outer',
 						on=['entity', 'code', 'date']
+					)
+
+			# Update columns
+			columns = set(df.columns)
+
+			# Has index
+			if self.ix.has(name):
+				self.ix.update(dict(
+					_key=name,
+					file=file,
+					collection=col_name,
+					columns=list(list(columns)),
+					has_shape=self.dataset_has_shape(name)
+				))
+
+			# Has no index
+			else:
+				self.ix.insert(dict(
+					_key=name,
+					file=file,
+					collection=col_name,
+					columns=list(list(columns)),
+					has_shape=self.dataset_has_shape(name)
+				))
+
+			# Process the dataset
+			if name in self.known_datasets_:
+				self.process_dataset(df, name)
+
+			# Load the data
+			collection.import_bulk(
+				[
+					{k: v for k, v in m.items() if pd.notnull(v)}
+					for m in df.to_dict(orient='rows')
+				],
+				on_duplicate='error',
+				sync=True
+			)
+
+		# Intercept USAFacts datasets
+		elif name == 'usafacts_covid_19_by_county':
+
+			# Merge directory datasets
+			df = None
+			if file[-1] != '/':
+				file += '/'
+			for item in glob.glob(file + "*.csv"):
+				if df is None:
+					df = pd.read_csv(item)
+				else:
+					df = df.merge(
+						pd.read_csv(item),
+						how='outer',
+						on=[
+							'county_fips', 'county_name', 'state_name',
+							'state_fips', 'date', 'lat', 'long', 'geometry'
+						]
 					)
 
 			# Update columns
@@ -477,6 +535,8 @@ class Database:
 			self.process_cdc_behavioral_risk_factor_surveillance(dataset)
 		elif name == 'cdc_chronic_disease_indicators':
 			self.process_cdc_chronic_disease_indicators(dataset)
+		elif name == 'usafacts_covid_19_by_county':
+			self.process_usafacts_covid_19_by_county(dataset)
 
 	# Check if dataset has a shape
 	def dataset_has_shape(self, name: str) -> bool:
@@ -570,6 +630,8 @@ class Database:
 			return False
 		elif name == 'cdc_chronic_disease_indicators':
 			return False
+		elif name == 'usafacts_covid_19_by_county':
+			return True
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset: pd.DataFrame):
@@ -1882,6 +1944,30 @@ class Database:
 					None if x == 'US'
 					else x
 			)
+
+	# Process 'usafacts_covid_19_by_county' dataset
+	def process_usafacts_covid_19_by_county(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise geometry field.
+		dataset['geometry'] = dataset['geometry'].apply(
+			lambda x:
+				None if pd.isna(x)
+				else self.parse_geometries(x)
+		)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add state.
+		dataset['iso_level_2'] = dataset['state_name']
+
+		# Add county.
+		dataset['iso_level_3'] = dataset['county_name']
 
 	# Process 'border_wait_times_at_us_canada_border' dataset
 	def process_border_wait_times_at_us_canada_border(self, file: str) -> int:
