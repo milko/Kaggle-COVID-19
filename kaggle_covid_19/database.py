@@ -6,8 +6,11 @@
 
 # Import libraries.
 import re
+import os
+import glob
 import numpy as np
 import pandas as pd
+from types import *
 from arango import ArangoClient
 
 
@@ -45,7 +48,15 @@ class Database:
 		'hifld_nursing_homes',
 		'hifld_public_health_departments',
 		'hifld_urgent_care_facilities',
-		'hifld_us_ports_of_entry'
+		'hifld_us_ports_of_entry',
+		'ihme_hospitalisation',
+		'nextstrain_phylogeny',
+		'owd_tests_conducted',
+		'wfp_travel_restrictions',
+		'cdc_cities_census_tract_level',
+		'cdc_global_adult_tobacco_survey', 'cdc_global_youth_tobacco_survey',
+		'cdc_behavioral_risk_factor_surveillance',
+		'cdc_chronic_disease_indicators'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -127,7 +138,7 @@ class Database:
 	# Instantiate object
 	def __init__(
 			self,
-			pswd,
+			pswd: str,
 			host='http://localhost:8529',
 			base='Kaggle-Covid-19',
 			user='root'):
@@ -152,7 +163,7 @@ class Database:
 			self.ix = self.db.create_collection(self.index_name_, edge=False)
 
 	# Load file
-	def load_file(self, file, name, is_edge=False, do_clear=True):
+	def load_file(self, file: str, name: str, is_edge=False, do_clear=True) -> int:
 		'''
 		Load provided file into database.
 
@@ -177,46 +188,45 @@ class Database:
 		if do_clear:
 			collection.truncate()
 
-		# Load data
-		done_index = False
-		reader = pd.read_csv(file, chunksize=self.chunk_size_)
-		for df in reader:
+		# Intercept our world in data datasets
+		if name == 'owd_tests_conducted':
 
-			# Save columns to index.
-			if not done_index:
-				columns = set()
-
-				# Handle existing columns.
-				if not do_clear:
-					if self.ix.has(name):
-						temp = collection.get(name)
-						if temp is not None:
-							columns = set(temp['columns'])
-
-				# Update columns
-				columns.update(df.columns)
-
-				# Has index
-				if self.ix.has(name):
-					self.ix.update(dict(
-						_key=name,
-						file=file,
-						collection=col_name,
-						columns=list(list(columns)),
-						has_shape=self.dataset_has_shape(name)
-					))
-
-				# Has no index
+			# Merge directory datasets
+			df = None
+			if file[-1] != '/':
+				file += '/'
+			for item in glob.glob(file + "*.csv"):
+				if df is None:
+					df = pd.read_csv(item)
 				else:
-					self.ix.insert(dict(
-						_key=name,
-						file=file,
-						collection=col_name,
-						columns=list(list(columns)),
-						has_shape=self.dataset_has_shape(name)
-					))
+					df = df.merge(
+						pd.read_csv(item),
+						how='outer',
+						on=['entity', 'code', 'date']
+					)
 
-				done_index = True
+			# Update columns
+			columns = set(df.columns)
+
+			# Has index
+			if self.ix.has(name):
+				self.ix.update(dict(
+					_key=name,
+					file=file,
+					collection=col_name,
+					columns=list(list(columns)),
+					has_shape=self.dataset_has_shape(name)
+				))
+
+			# Has no index
+			else:
+				self.ix.insert(dict(
+					_key=name,
+					file=file,
+					collection=col_name,
+					columns=list(list(columns)),
+					has_shape=self.dataset_has_shape(name)
+				))
 
 			# Process the dataset
 			if name in self.known_datasets_:
@@ -232,11 +242,69 @@ class Database:
 				sync=True
 			)
 
+		# All others
+		else:
+
+			# Load data
+			done_index = False
+			reader = pd.read_csv(file, chunksize=self.chunk_size_)
+			for df in reader:
+
+				# Save columns to index.
+				if not done_index:
+					columns = set()
+
+					# Handle existing columns.
+					if not do_clear:
+						if self.ix.has(name):
+							temp = collection.get(name)
+							if temp is not None:
+								columns = set(temp['columns'])
+
+					# Update columns
+					columns.update(df.columns)
+
+					# Has index
+					if self.ix.has(name):
+						self.ix.update(dict(
+							_key=name,
+							file=file,
+							collection=col_name,
+							columns=list(list(columns)),
+							has_shape=self.dataset_has_shape(name)
+						))
+
+					# Has no index
+					else:
+						self.ix.insert(dict(
+							_key=name,
+							file=file,
+							collection=col_name,
+							columns=list(list(columns)),
+							has_shape=self.dataset_has_shape(name)
+						))
+
+					done_index = True
+
+				# Process the dataset
+				if name in self.known_datasets_:
+					self.process_dataset(df, name)
+
+				# Load the data
+				collection.import_bulk(
+					[
+						{k: v for k, v in m.items() if pd.notnull(v)}
+						for m in df.to_dict(orient='rows')
+					],
+					on_duplicate='error',
+					sync=True
+				)
+
 		# Return record count.
 		return collection.count()										# ==>
 
 	# Parse geometries
-	def parse_geometries(self, geometry):
+	def parse_geometries(self, geometry: str):
 		'''
 		Process the provided geometry and return in GeoJSON format.
 		Supports POINT and POLYGON
@@ -289,7 +357,7 @@ class Database:
 			raise Exception("Unsupported shape: {}".format(parts[0]))
 
 	# Select collection
-	def select_collection(self, name):
+	def select_collection(self, name: str) -> str:
 		'''
 		Return collection name according to dataset name.
 
@@ -318,7 +386,7 @@ class Database:
 			return name													# ==>
 
 	# Process dataset
-	def process_dataset(self, dataset, name):
+	def process_dataset(self, dataset: pd.DataFrame, name: str):
 		'''
 		Process dataset before storing in database.
 
@@ -391,9 +459,27 @@ class Database:
 			self.process_hifld_urgent_care_facilities(dataset)
 		elif name == 'hifld_us_ports_of_entry':
 			self.process_hifld_us_ports_of_entry(dataset)
+		elif name == 'ihme_hospitalisation':
+			self.process_ihme_hospitalisation(dataset)
+		elif name == 'nextstrain_phylogeny':
+			self.process_nextstrain_phylogeny(dataset)
+		elif name == 'owd_tests_conducted':
+			self.process_owd_tests_conducted(dataset)
+		elif name == 'wfp_travel_restrictions':
+			self.process_wfp_travel_restrictions(dataset)
+		elif name == 'cdc_cities_census_tract_level':
+			self.process_cdc_cities_census_tract_level(dataset)
+		elif name == 'cdc_global_adult_tobacco_survey':
+			self.process_cdc_global_adult_tobacco_survey(dataset)
+		elif name == 'cdc_global_youth_tobacco_survey':
+			self.process_cdc_global_youth_tobacco_survey(dataset)
+		elif name == 'cdc_behavioral_risk_factor_surveillance':
+			self.process_cdc_behavioral_risk_factor_surveillance(dataset)
+		elif name == 'cdc_chronic_disease_indicators':
+			self.process_cdc_chronic_disease_indicators(dataset)
 
 	# Check if dataset has a shape
-	def dataset_has_shape(self, name):
+	def dataset_has_shape(self, name: str) -> bool:
 		'''
 		Check if dataset has shape.
 
@@ -466,9 +552,27 @@ class Database:
 			return True
 		elif name == 'hifld_us_ports_of_entry':
 			return True
+		elif name == 'ihme_hospitalisation':
+			return False
+		elif name == 'nextstrain_phylogeny':
+			return False
+		elif name == 'owd_tests_conducted':
+			return False
+		elif name == 'wfp_travel_restrictions':
+			return False
+		elif name == 'cdc_cities_census_tract_level':
+			return False
+		elif name == 'cdc_global_adult_tobacco_survey':
+			return False
+		elif name == 'cdc_global_youth_tobacco_survey':
+			return False
+		elif name == 'cdc_behavioral_risk_factor_surveillance':
+			return False
+		elif name == 'cdc_chronic_disease_indicators':
+			return False
 
 	# Process 'coders_against_covid' dataset
-	def process_coders_against_covid(self, dataset):
+	def process_coders_against_covid(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add `iso_level_1` field ('USA').
@@ -551,7 +655,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['county']
 
 	# Process 'canada_open_data_working_group' dataset
-	def process_canada_open_data_working_group(self, dataset):
+	def process_canada_open_data_working_group(self, dataset: pd.DataFrame):
 		'''
 		Drop `case_id field, convert `sex` into `sex_male` boolean, convert
 		`has_travel_history` to boolean and add `iso_level_1` field ('CAN').
@@ -599,7 +703,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['health_region']
 
 	# Process 'covid_tracker_canada' dataset
-	def process_covid_tracker_canada(self, dataset):
+	def process_covid_tracker_canada(self, dataset: pd.DataFrame):
 		'''
 		Set _key to `id` field, convert `confirmed_presumptive` field to
 		boolean and add `iso_level_1` field ('CAN').
@@ -632,7 +736,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['city']
 
 	# Process 'covid_sources_for_counties' dataset
-	def process_covid_sources_for_counties(self, dataset):
+	def process_covid_sources_for_counties(self, dataset: pd.DataFrame):
 		'''
 		Set key to iso_level_1 + `state` + `county` and add `iso_level_1` field
 		('USA').
@@ -670,7 +774,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['county']
 
 	# Process 'covid_sources_for_states' dataset
-	def process_covid_sources_for_states(self, dataset):
+	def process_covid_sources_for_states(self, dataset: pd.DataFrame):
 		'''
 		Set key to iso_level_1 + `state`, set `pum` to boolean and add `iso_level_1`
 		field ('USA').
@@ -714,7 +818,7 @@ class Database:
 			)
 
 	# Process 'covid_statistics_for_states_daily' dataset
-	def process_covid_statistics_for_states_daily(self, dataset):
+	def process_covid_statistics_for_states_daily(self, dataset: pd.DataFrame):
 		'''
 		Set key field to `hash` and add `iso_level_1` field ('USA').
 
@@ -739,7 +843,7 @@ class Database:
 			)
 
 	# Process 'ecdc_worldwide' dataset
-	def process_ecdc_worldwide(self, dataset):
+	def process_ecdc_worldwide(self, dataset: pd.DataFrame):
 		'''
 		Set `iso_level_1` field to `countryterritorycode`.
 
@@ -753,7 +857,7 @@ class Database:
 		dataset['iso_level_1'] = dataset['countryterritorycode']
 
 	# Process 'cdcs_social_vulnerability_index_tract_level' dataset
-	def process_cdcs_social_vulnerability_index_tract_level(self, dataset):
+	def process_cdcs_social_vulnerability_index_tract_level(self, dataset: pd.DataFrame):
 		'''
 		Set `iso_level_1` to 'USA',
 		`iso_level_2` to `st_abbr`, iso_level_3` to `county`, normalise t/f
@@ -805,7 +909,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['county']
 
 	# Process 'cdcs_social_vulnerability_index_county_level' dataset
-	def process_cdcs_social_vulnerability_index_county_level(self, dataset):
+	def process_cdcs_social_vulnerability_index_county_level(self, dataset: pd.DataFrame):
 		'''
 		Set `iso_level_1` to 'USA',
 		`iso_level_2` to `st_abbr`, iso_level_3` to `county`, normalise t/f
@@ -858,7 +962,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['county']
 
 	# Process 'cdphe_health_facilities' dataset
-	def process_cdphe_health_facilities(self, dataset):
+	def process_cdphe_health_facilities(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -910,7 +1014,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'coronavirus_world_airport_impacts' dataset
-	def process_coronavirus_world_airport_impacts(self, dataset):
+	def process_coronavirus_world_airport_impacts(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format, set key field to `ident` and add ISO fields.
@@ -954,7 +1058,7 @@ class Database:
 		dataset['iso_level_3'] = dataset['municipali']
 
 	# Process 'definitive_healthcare_usa_hospital_beds' dataset
-	def process_definitive_healthcare_usa_hospital_beds(self, dataset):
+	def process_definitive_healthcare_usa_hospital_beds(self, dataset: pd.DataFrame):
 		'''
 		Normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -991,7 +1095,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['hq_city']
 
 	# Process 'github_belgium_regions' dataset
-	def process_github_belgium_regions(self, dataset):
+	def process_github_belgium_regions(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1002,7 +1106,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'github_italy_regions' dataset
-	def process_github_italy_regions(self, dataset):
+	def process_github_italy_regions(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1013,7 +1117,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'github_uk_regions' dataset
-	def process_github_uk_regions(self, dataset):
+	def process_github_uk_regions(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1024,7 +1128,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'github_france_regions' dataset
-	def process_github_france_regions(self, dataset):
+	def process_github_france_regions(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1035,7 +1139,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'github_spain_regions' dataset
-	def process_github_spain_regions(self, dataset):
+	def process_github_spain_regions(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1046,7 +1150,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'harvard_global_health_institute_20' dataset
-	def process_harvard_global_health_institute_20(self, dataset):
+	def process_harvard_global_health_institute_20(self, dataset: pd.DataFrame):
 		'''
 		Load as-is and add by population contracted.
 
@@ -1060,7 +1164,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'harvard_global_health_institute_40' dataset
-	def process_harvard_global_health_institute_40(self, dataset):
+	def process_harvard_global_health_institute_40(self, dataset: pd.DataFrame):
 		'''
 		Load as-is and add by population contracted.
 
@@ -1074,7 +1178,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'harvard_global_health_institute_60' dataset
-	def process_harvard_global_health_institute_60(self, dataset):
+	def process_harvard_global_health_institute_60(self, dataset: pd.DataFrame):
 		'''
 		Load as-is and add by population contracted.
 
@@ -1088,7 +1192,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'hde_acaps_government_measures' dataset
-	def process_hde_acaps_government_measures(self, dataset):
+	def process_hde_acaps_government_measures(self, dataset: pd.DataFrame):
 		'''
 		Load as-is and normalise booleans.
 
@@ -1114,7 +1218,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'hde_global_school_closures' dataset
-	def process_hde_global_school_closures(self, dataset):
+	def process_hde_global_school_closures(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1125,7 +1229,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'hde_inform_covid_indicators' dataset
-	def process_hde_inform_covid_indicators(self, dataset):
+	def process_hde_inform_covid_indicators(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1136,7 +1240,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'hde_total_covid_tests' dataset
-	def process_hde_total_covid_tests(self, dataset):
+	def process_hde_total_covid_tests(self, dataset: pd.DataFrame):
 		'''
 		Load as-is.
 
@@ -1147,7 +1251,7 @@ class Database:
 		dataset['_dataset_has_shape'] = False
 
 	# Process 'hifld_aircraft_landing_facilities' dataset
-	def process_hifld_aircraft_landing_facilities(self, dataset):
+	def process_hifld_aircraft_landing_facilities(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1203,7 +1307,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_hospitals' dataset
-	def process_hifld_hospitals(self, dataset):
+	def process_hifld_hospitals(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1257,7 +1361,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_local_emergency_operations_centers' dataset
-	def process_hifld_local_emergency_operations_centers(self, dataset):
+	def process_hifld_local_emergency_operations_centers(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1311,7 +1415,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_nursing_homes' dataset
-	def process_hifld_nursing_homes(self, dataset):
+	def process_hifld_nursing_homes(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1350,7 +1454,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_public_health_departments' dataset
-	def process_hifld_public_health_departments(self, dataset):
+	def process_hifld_public_health_departments(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1404,7 +1508,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_urgent_care_facilities' dataset
-	def process_hifld_urgent_care_facilities(self, dataset):
+	def process_hifld_urgent_care_facilities(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1458,7 +1562,7 @@ class Database:
 		dataset['iso_level_4'] = dataset['city']
 
 	# Process 'hifld_us_ports_of_entry' dataset
-	def process_hifld_us_ports_of_entry(self, dataset):
+	def process_hifld_us_ports_of_entry(self, dataset: pd.DataFrame):
 		'''
 		Process t/f fields into booleans, normalise `geometry` field
 		into GeoJSON format and add ISO fields.
@@ -1523,8 +1627,264 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
 
+	# Process 'ihme_hospitalisation' dataset
+	def process_ihme_hospitalisation(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add province
+		dataset['iso_level_2'] = \
+			dataset['location'].apply(
+				lambda x:
+					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
+					else None
+			)
+
+		# Drop location name
+		dataset.drop(columns='location_name', inplace=True)
+
+	# Process 'nextstrain_phylogeny' dataset
+	def process_nextstrain_phylogeny(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Normalise non available values.
+		dataset.replace(
+			to_replace='?',
+			value=float('NaN'),
+			inplace=True
+		)
+
+		# Normalise sex.
+		dataset['sex_male'] = dataset['sex'].apply(
+			lambda x:
+				True if x == 'Male'
+				else (
+					False if x == 'Female'
+					else None
+				)
+		)
+
+	# Process 'owd_tests_conducted' dataset
+	def process_owd_tests_conducted(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['code']
+
+	# Process 'wfp_travel_restrictions' dataset
+	def process_wfp_travel_restrictions(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['iso3']
+
+	# Process 'cdc_cities_census_tract_level' dataset
+	def process_cdc_cities_census_tract_level(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Get coordinates
+		dataset['latitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(1)
+					)
+			)
+		dataset['longitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(2)
+					)
+			)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add state.
+		dataset['iso_level_2'] = dataset['stateabbr']
+
+		# Add city
+		dataset['iso_level_3'] = dataset['placename']
+
+	# Process 'cdc_global_adult_tobacco_survey' dataset
+	def process_cdc_global_adult_tobacco_survey(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Get coordinates
+		dataset['latitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(1)
+					)
+			)
+		dataset['longitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(2)
+					)
+			)
+
+		# Add country.
+		dataset['iso_level_1'] = \
+			dataset['countryabbr'].apply(
+				lambda x:
+					None if x is None
+					else x.upper()
+			)
+
+	# Process 'cdc_global_youth_tobacco_survey' dataset
+	def process_cdc_global_youth_tobacco_survey(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Get coordinates
+		dataset['latitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(1)
+					)
+			)
+		dataset['longitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(2)
+					)
+			)
+
+		# Add country.
+		dataset['iso_level_1'] = \
+			dataset['countryabbr'].apply(
+				lambda x:
+					None if x is None
+					else x.upper()
+			)
+
+	# Process 'cdc_behavioral_risk_factor_surveillance' dataset
+	def process_cdc_behavioral_risk_factor_surveillance(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Get coordinates
+		dataset['latitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(1)
+					)
+			)
+		dataset['longitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(2)
+					)
+			)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add state.
+		dataset['iso_level_2'] = \
+			dataset['locationabbr'].apply(
+				lambda x:
+					None if x == 'US'
+					else x
+			)
+
+	# Process 'cdc_chronic_disease_indicators' dataset
+	def process_cdc_chronic_disease_indicators(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Get coordinates
+		dataset['latitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(1)
+					)
+			)
+		dataset['longitude'] = \
+			dataset['geolocation'].apply(
+				lambda x:
+					None if pd.isna(x)
+					else float(
+						re.search('\(([-]?\d+\.\d+),[ ]?([-]?\d+\.\d+)\)', x)\
+							.group(2)
+					)
+			)
+
+		# Add country.
+		dataset['iso_level_1'] = 'USA'
+
+		# Add state.
+		dataset['iso_level_2'] = \
+			dataset['locationabbr'].apply(
+				lambda x:
+					None if x == 'US'
+					else x
+			)
+
 	# Process 'border_wait_times_at_us_canada_border' dataset
-	def process_border_wait_times_at_us_canada_border(self, file):
+	def process_border_wait_times_at_us_canada_border(self, file: str) -> int:
 		'''
 		Normalise `geometry` fields.
 
