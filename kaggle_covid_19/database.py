@@ -58,7 +58,8 @@ class Database:
 		'cdc_behavioral_risk_factor_surveillance',
 		'cdc_chronic_disease_indicators',
 		'usafacts_covid_19_by_county',
-		'who_tuberculosis_case_notifications', 'who_situation_reports_covid_19'
+		'who_tuberculosis_case_notifications', 'who_situation_reports_covid_19',
+		'wb_global_population'
 	]
 	us_states = {
 		'Alabama': 'AL',
