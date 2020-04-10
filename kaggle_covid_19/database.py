@@ -57,7 +57,8 @@ class Database:
 		'cdc_global_adult_tobacco_survey', 'cdc_global_youth_tobacco_survey',
 		'cdc_behavioral_risk_factor_surveillance',
 		'cdc_chronic_disease_indicators',
-		'usafacts_covid_19_by_county'
+		'usafacts_covid_19_by_county',
+		'who_tuberculosis_case_notifications', 'who_situation_reports_covid_19'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -537,6 +538,8 @@ class Database:
 			self.process_cdc_chronic_disease_indicators(dataset)
 		elif name == 'usafacts_covid_19_by_county':
 			self.process_usafacts_covid_19_by_county(dataset)
+		elif name == 'who_tuberculosis_case_notifications':
+			self.process_who_tuberculosis_case_notifications(dataset)
 
 	# Check if dataset has a shape
 	def dataset_has_shape(self, name: str) -> bool:
@@ -632,6 +635,8 @@ class Database:
 			return False
 		elif name == 'usafacts_covid_19_by_county':
 			return True
+		elif name == 'who_situation_reports_covid_19':
+			return False
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset: pd.DataFrame):
@@ -1968,6 +1973,17 @@ class Database:
 
 		# Add county.
 		dataset['iso_level_3'] = dataset['county_name']
+
+	# Process 'who_tuberculosis_case_notifications' dataset
+	def process_who_tuberculosis_case_notifications(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['iso3']
 
 	# Process 'border_wait_times_at_us_canada_border' dataset
 	def process_border_wait_times_at_us_canada_border(self, file: str) -> int:
