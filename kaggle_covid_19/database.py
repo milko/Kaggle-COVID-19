@@ -59,7 +59,10 @@ class Database:
 		'cdc_chronic_disease_indicators',
 		'usafacts_covid_19_by_county',
 		'who_tuberculosis_case_notifications', 'who_situation_reports_covid_19',
-		'wb_global_population'
+		'wb_indicators',
+		'wb_global_population',
+		'wb_health_population_summary',
+		'wb_world_development_indicators_summary'
 	]
 	us_states = {
 		'Alabama': 'AL',
@@ -302,6 +305,85 @@ class Database:
 				sync=True
 			)
 
+		# Intercept World Bank data
+		elif name == 'wb_indicators':
+
+			# Datasets using indicators
+			files = [
+				'climate-change.csv',
+				'community-health-workers-per-1-000-people.csv',
+				'environment-social-and-governance-data.csv',
+				'hospital-beds-per-1-000-people.csv',
+				'nurses-and-midwives-per-1-000-people.csv',
+				'people-with-basic-handwashing-facilities-including-soap-and-water-of-population.csv',
+				'physicians-per-1-000-people.csv',
+				'smoking-prevalence-total-ages-15.csv',
+				'specialist-surgical-workforce-per-100-000-population.csv'
+			]
+
+			# Get/create collection
+			dict_name = 'wb_ddict'
+			if self.db.has_collection(dict_name):
+				col = self.db.collection(dict_name)
+			else:
+				col = self.db.create_collection(dict_name, edge=False)
+
+			# Truncate collection
+			if do_clear:
+				col.truncate()
+
+			# Create data dictionary
+			dictionary = dict()
+			df = pd.DataFrame()
+			if file[-1] != '/':
+				file += '/'
+			for item in files:
+				df = pd.read_csv(
+					file + item,
+					usecols=['indicator_code', 'indicator_name']
+				).drop_duplicates(ignore_index=True)
+				for idx in range(0, len(df) - 1):
+					dictionary[df.loc[idx]['indicator_code']] = \
+						df.loc[idx]['indicator_name']
+
+			# Create records
+			records = []
+			for key, value in dictionary.items():
+				records.append(dict(_key=key, label=value))
+
+			# Write data dictionary
+			col.import_bulk(
+				records,
+				on_duplicate='error',
+				sync=True
+			)
+
+			# Iterate datasets
+			for item in files:
+
+				# Read the data
+				df = pd.read_csv(file + item)\
+					.drop(columns=['indicator_name', 'untitled_1'], errors='ignore')\
+					.melt(id_vars=['country_name', 'country_code', 'indicator_code'])\
+					.rename(columns=dict(variable='year'))\
+					.dropna(axis=0, how='any')
+
+				# Normalise year
+				df['year'] = df['year'].apply(lambda x: int(x))
+
+				# Set country code
+				df['iso_level_1'] = df['country_code']
+
+				# Load the data
+				collection.import_bulk(
+					[
+						{k: v for k, v in m.items() if pd.notnull(v)}
+						for m in df.to_dict(orient='rows')
+					],
+					on_duplicate='error',
+					sync=True
+				)
+
 		# All others
 		else:
 
@@ -348,7 +430,7 @@ class Database:
 
 				# Process the dataset
 				if name in self.known_datasets_:
-					self.process_dataset(df, name)
+					df = self.process_dataset(df, name)
 
 				# Load the data
 				collection.import_bulk(
@@ -456,91 +538,99 @@ class Database:
 
 		# Parse by name
 		if name == 'coders_against_covid':
-			self.process_coders_against_covid(dataset)
+			dataset = self.process_coders_against_covid(dataset)
 		elif name == 'county_health_rankings':
-			self.process_county_health_rankings(dataset)
+			dataset = self.process_county_health_rankings(dataset)
 		elif name == 'canada_open_data_working_group':
-			self.process_canada_open_data_working_group(dataset)
+			dataset = self.process_canada_open_data_working_group(dataset)
 		elif name == 'covid_tracker_canada':
-			self.process_covid_tracker_canada(dataset)
+			dataset = self.process_covid_tracker_canada(dataset)
 		elif name == 'covid_sources_for_counties':
-			self.process_covid_sources_for_counties(dataset)
+			dataset = self.process_covid_sources_for_counties(dataset)
 		elif name == 'covid_sources_for_states':
-			self.process_covid_sources_for_states(dataset)
+			dataset = self.process_covid_sources_for_states(dataset)
 		elif name == 'covid_statistics_for_states_daily':
-			self.process_covid_statistics_for_states_daily(dataset)
+			dataset = self.process_covid_statistics_for_states_daily(dataset)
 		elif name == 'ecdc_worldwide':
-			self.process_ecdc_worldwide(dataset)
+			dataset = self.process_ecdc_worldwide(dataset)
 		elif name == 'cdcs_social_vulnerability_index_tract_level':
-			self.process_cdcs_social_vulnerability_index_tract_level(dataset)
+			dataset = self.process_cdcs_social_vulnerability_index_tract_level(dataset)
 		elif name == 'cdcs_social_vulnerability_index_county_level':
-			self.process_cdcs_social_vulnerability_index_county_level(dataset)
+			dataset = self.process_cdcs_social_vulnerability_index_county_level(dataset)
 		elif name == 'cdphe_health_facilities':
-			self.process_cdphe_health_facilities(dataset)
+			dataset = self.process_cdphe_health_facilities(dataset)
 		elif name == 'coronavirus_world_airport_impacts':
-			self.process_coronavirus_world_airport_impacts(dataset)
+			dataset = self.process_coronavirus_world_airport_impacts(dataset)
 		elif name == 'definitive_healthcare_usa_hospital_beds':
-			self.process_definitive_healthcare_usa_hospital_beds(dataset)
+			dataset = self.process_definitive_healthcare_usa_hospital_beds(dataset)
 		elif name == 'github_belgium_regions':
-			self.process_github_belgium_regions(dataset)
+			dataset = self.process_github_belgium_regions(dataset)
 		elif name == 'github_italy_regions':
-			self.process_github_italy_regions(dataset)
+			dataset = self.process_github_italy_regions(dataset)
 		elif name == 'github_uk_regions':
-			self.process_github_uk_regions(dataset)
+			dataset = self.process_github_uk_regions(dataset)
 		elif name == 'github_france_regions':
-			self.process_github_france_regions(dataset)
+			dataset = self.process_github_france_regions(dataset)
 		elif name == 'github_spain_regions':
-			self.process_github_spain_regions(dataset)
+			dataset = self.process_github_spain_regions(dataset)
 		elif name == 'harvard_global_health_institute_20':
-			self.process_harvard_global_health_institute_20(dataset)
+			dataset = self.process_harvard_global_health_institute_20(dataset)
 		elif name == 'harvard_global_health_institute_40':
-			self.process_harvard_global_health_institute_40(dataset)
+			dataset = self.process_harvard_global_health_institute_40(dataset)
 		elif name == 'harvard_global_health_institute_60':
-			self.process_harvard_global_health_institute_60(dataset)
+			dataset = self.process_harvard_global_health_institute_60(dataset)
 		elif name == 'hde_acaps_government_measures':
-			self.process_hde_acaps_government_measures(dataset)
+			dataset = self.process_hde_acaps_government_measures(dataset)
 		elif name == 'hde_global_school_closures':
-			self.process_hde_global_school_closures(dataset)
+			dataset = self.process_hde_global_school_closures(dataset)
 		elif name == 'hde_inform_covid_indicators':
-			self.process_hde_inform_covid_indicators(dataset)
+			dataset = self.process_hde_inform_covid_indicators(dataset)
 		elif name == 'hde_total_covid_tests':
-			self.process_hde_total_covid_tests(dataset)
+			dataset = self.process_hde_total_covid_tests(dataset)
 		elif name == 'hifld_aircraft_landing_facilities':
-			self.process_hifld_aircraft_landing_facilities(dataset)
+			dataset = self.process_hifld_aircraft_landing_facilities(dataset)
 		elif name == 'hifld_hospitals':
-			self.process_hifld_hospitals(dataset)
+			dataset = self.process_hifld_hospitals(dataset)
 		elif name == 'hifld_local_emergency_operations_centers':
-			self.process_hifld_local_emergency_operations_centers(dataset)
+			dataset = self.process_hifld_local_emergency_operations_centers(dataset)
 		elif name == 'hifld_nursing_homes':
-			self.process_hifld_nursing_homes(dataset)
+			dataset = self.process_hifld_nursing_homes(dataset)
 		elif name == 'hifld_public_health_departments':
-			self.process_hifld_public_health_departments(dataset)
+			dataset = self.process_hifld_public_health_departments(dataset)
 		elif name == 'hifld_urgent_care_facilities':
-			self.process_hifld_urgent_care_facilities(dataset)
+			dataset = self.process_hifld_urgent_care_facilities(dataset)
 		elif name == 'hifld_us_ports_of_entry':
-			self.process_hifld_us_ports_of_entry(dataset)
+			dataset = self.process_hifld_us_ports_of_entry(dataset)
 		elif name == 'ihme_hospitalisation':
-			self.process_ihme_hospitalisation(dataset)
+			dataset = self.process_ihme_hospitalisation(dataset)
 		elif name == 'nextstrain_phylogeny':
-			self.process_nextstrain_phylogeny(dataset)
+			dataset = self.process_nextstrain_phylogeny(dataset)
 		elif name == 'owd_tests_conducted':
-			self.process_owd_tests_conducted(dataset)
+			dataset = self.process_owd_tests_conducted(dataset)
 		elif name == 'wfp_travel_restrictions':
-			self.process_wfp_travel_restrictions(dataset)
+			dataset = self.process_wfp_travel_restrictions(dataset)
 		elif name == 'cdc_cities_census_tract_level':
-			self.process_cdc_cities_census_tract_level(dataset)
+			dataset = self.process_cdc_cities_census_tract_level(dataset)
 		elif name == 'cdc_global_adult_tobacco_survey':
-			self.process_cdc_global_adult_tobacco_survey(dataset)
+			dataset = self.process_cdc_global_adult_tobacco_survey(dataset)
 		elif name == 'cdc_global_youth_tobacco_survey':
-			self.process_cdc_global_youth_tobacco_survey(dataset)
+			dataset = self.process_cdc_global_youth_tobacco_survey(dataset)
 		elif name == 'cdc_behavioral_risk_factor_surveillance':
-			self.process_cdc_behavioral_risk_factor_surveillance(dataset)
+			dataset = self.process_cdc_behavioral_risk_factor_surveillance(dataset)
 		elif name == 'cdc_chronic_disease_indicators':
-			self.process_cdc_chronic_disease_indicators(dataset)
+			dataset = self.process_cdc_chronic_disease_indicators(dataset)
 		elif name == 'usafacts_covid_19_by_county':
-			self.process_usafacts_covid_19_by_county(dataset)
+			dataset = self.process_usafacts_covid_19_by_county(dataset)
 		elif name == 'who_tuberculosis_case_notifications':
-			self.process_who_tuberculosis_case_notifications(dataset)
+			dataset = self.process_who_tuberculosis_case_notifications(dataset)
+		elif name == 'wb_global_population':
+			dataset = self.process_wb_global_population(dataset)
+		elif name == 'wb_health_population_summary':
+			dataset = self.process_wb_health_population_summary(dataset)
+		elif name == 'wb_world_development_indicators_summary':
+			dataset = self.process_wb_world_development_indicators_summary(dataset)
+
+		return dataset													# ==>
 
 	# Check if dataset has a shape
 	def dataset_has_shape(self, name: str) -> bool:
@@ -638,6 +728,12 @@ class Database:
 			return True
 		elif name == 'who_situation_reports_covid_19':
 			return False
+		elif name == 'wb_indicators':
+			return False
+		elif name == 'wb_global_population':
+			return False
+		elif name == 'wb_health_population_summary':
+			return False
 
 	# Process 'coders_against_covid' dataset
 	def process_coders_against_covid(self, dataset: pd.DataFrame):
@@ -675,7 +771,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = \
 			dataset['location_place_of_service_type'].apply(
 				lambda x:
@@ -697,6 +792,8 @@ class Database:
 		# Copy to iso level 3
 		dataset['iso_level_3'] = dataset['location_address_locality']
 
+		return dataset  												# ==>
+
 	# Process 'county_health_rankings' dataset
 	def process_county_health_rankings(self, dataset):
 		'''
@@ -704,9 +801,6 @@ class Database:
 
 		:param dataset: Dataset to process
 		'''
-
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
 
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
@@ -722,6 +816,8 @@ class Database:
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
 
+		return dataset  												# ==>
+
 	# Process 'canada_open_data_working_group' dataset
 	def process_canada_open_data_working_group(self, dataset: pd.DataFrame):
 		'''
@@ -733,9 +829,6 @@ class Database:
 
 		# Drop case_id
 		dataset.drop('case_id', axis=1, inplace=True)
-
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
 
 		# Normalise sex
 		dataset['sex_male'] = dataset['sex'][dataset['sex'] != 'Not Reported'] \
@@ -770,6 +863,8 @@ class Database:
 		# Add county
 		dataset['iso_level_3'] = dataset['health_region']
 
+		return dataset  												# ==>
+
 	# Process 'covid_tracker_canada' dataset
 	def process_covid_tracker_canada(self, dataset: pd.DataFrame):
 		'''
@@ -786,9 +881,6 @@ class Database:
 		dataset['confirmed_presumptive'] = dataset['confirmed_presumptive'] \
 			.apply(lambda x: True if x == 'CONFIRMED' else False)
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
-
 		# Add country.
 		dataset['iso_level_1'] = 'CAN'
 
@@ -802,6 +894,8 @@ class Database:
 
 		# Add county
 		dataset['iso_level_3'] = dataset['city']
+
+		return dataset  												# ==>
 
 	# Process 'covid_sources_for_counties' dataset
 	def process_covid_sources_for_counties(self, dataset: pd.DataFrame):
@@ -824,9 +918,6 @@ class Database:
 			axis=1
 		)
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
-
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
@@ -840,6 +931,8 @@ class Database:
 
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
+
+		return dataset  												# ==>
 
 	# Process 'covid_sources_for_states' dataset
 	def process_covid_sources_for_states(self, dataset: pd.DataFrame):
@@ -871,9 +964,6 @@ class Database:
 			axis=1
 		)
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
-
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
@@ -884,6 +974,8 @@ class Database:
 					'USA-{}'.format(self.us_states[x]) if x in self.us_states.keys()
 					else x
 			)
+
+		return dataset  												# ==>
 
 	# Process 'covid_statistics_for_states_daily' dataset
 	def process_covid_statistics_for_states_daily(self, dataset: pd.DataFrame):
@@ -896,9 +988,6 @@ class Database:
 		# Set record key
 		dataset['_key'] = dataset['hash']
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
-
 		# Add country.
 		dataset['iso_level_1'] = 'USA'
 
@@ -910,6 +999,8 @@ class Database:
 					else x
 			)
 
+		return dataset  												# ==>
+
 	# Process 'ecdc_worldwide' dataset
 	def process_ecdc_worldwide(self, dataset: pd.DataFrame):
 		'''
@@ -918,11 +1009,10 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
-
 		# Add country.
 		dataset['iso_level_1'] = dataset['countryterritorycode']
+
+		return dataset  												# ==>
 
 	# Process 'cdcs_social_vulnerability_index_tract_level' dataset
 	def process_cdcs_social_vulnerability_index_tract_level(self, dataset: pd.DataFrame):
@@ -959,7 +1049,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = 'TRACT'
 
 		# Add country.
@@ -975,6 +1064,8 @@ class Database:
 
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
+
+		return dataset  												# ==>
 
 	# Process 'cdcs_social_vulnerability_index_county_level' dataset
 	def process_cdcs_social_vulnerability_index_county_level(self, dataset: pd.DataFrame):
@@ -1012,7 +1103,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = 'COUNTY'
 
 		# Add country.
@@ -1028,6 +1118,8 @@ class Database:
 
 		# Add county
 		dataset['iso_level_3'] = dataset['county']
+
+		return dataset  												# ==>
 
 	# Process 'cdphe_health_facilities' dataset
 	def process_cdphe_health_facilities(self, dataset: pd.DataFrame):
@@ -1061,7 +1153,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = 'HEALTH FACILITY'
 
 		# Add country.
@@ -1080,6 +1171,8 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
+
+		return dataset  												# ==>
 
 	# Process 'coronavirus_world_airport_impacts' dataset
 	def process_coronavirus_world_airport_impacts(self, dataset: pd.DataFrame):
@@ -1113,7 +1206,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = 'AIRPORT'
 
 		# Add country.
@@ -1124,6 +1216,8 @@ class Database:
 
 		# Copy to iso level 3
 		dataset['iso_level_3'] = dataset['municipali']
+
+		return dataset  												# ==>
 
 	# Process 'definitive_healthcare_usa_hospital_beds' dataset
 	def process_definitive_healthcare_usa_hospital_beds(self, dataset: pd.DataFrame):
@@ -1142,7 +1236,6 @@ class Database:
 		)
 
 		# Indicate has shape
-		dataset['_dataset_has_shape'] = True
 		dataset['_dataset_item_type'] = 'HOSPITAL'
 
 		# Add country.
@@ -1162,6 +1255,8 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['hq_city']
 
+		return dataset  												# ==>
+
 	# Process 'github_belgium_regions' dataset
 	def process_github_belgium_regions(self, dataset: pd.DataFrame):
 		'''
@@ -1170,8 +1265,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'github_italy_regions' dataset
 	def process_github_italy_regions(self, dataset: pd.DataFrame):
@@ -1181,8 +1275,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'github_uk_regions' dataset
 	def process_github_uk_regions(self, dataset: pd.DataFrame):
@@ -1192,8 +1285,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'github_france_regions' dataset
 	def process_github_france_regions(self, dataset: pd.DataFrame):
@@ -1203,8 +1295,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'github_spain_regions' dataset
 	def process_github_spain_regions(self, dataset: pd.DataFrame):
@@ -1214,8 +1305,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'harvard_global_health_institute_20' dataset
 	def process_harvard_global_health_institute_20(self, dataset: pd.DataFrame):
@@ -1228,8 +1318,7 @@ class Database:
 		# Add by population contracted
 		dataset['by_population_contracted'] = 20
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'harvard_global_health_institute_40' dataset
 	def process_harvard_global_health_institute_40(self, dataset: pd.DataFrame):
@@ -1242,8 +1331,7 @@ class Database:
 		# Add by population contracted
 		dataset['by_population_contracted'] = 40
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'harvard_global_health_institute_60' dataset
 	def process_harvard_global_health_institute_60(self, dataset: pd.DataFrame):
@@ -1256,8 +1344,7 @@ class Database:
 		# Add by population contracted
 		dataset['by_population_contracted'] = 60
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'hde_acaps_government_measures' dataset
 	def process_hde_acaps_government_measures(self, dataset: pd.DataFrame):
@@ -1282,8 +1369,7 @@ class Database:
 					)
 			)
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset 													# ==>
 
 	# Process 'hde_global_school_closures' dataset
 	def process_hde_global_school_closures(self, dataset: pd.DataFrame):
@@ -1293,8 +1379,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'hde_inform_covid_indicators' dataset
 	def process_hde_inform_covid_indicators(self, dataset: pd.DataFrame):
@@ -1304,8 +1389,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'hde_total_covid_tests' dataset
 	def process_hde_total_covid_tests(self, dataset: pd.DataFrame):
@@ -1315,8 +1399,7 @@ class Database:
 		:param dataset: Dataset to process
 		'''
 
-		# Indicate has shape
-		dataset['_dataset_has_shape'] = False
+		return dataset  												# ==>
 
 	# Process 'hifld_aircraft_landing_facilities' dataset
 	def process_hifld_aircraft_landing_facilities(self, dataset: pd.DataFrame):
@@ -1374,6 +1457,8 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
 
+		return dataset  												# ==>
+
 	# Process 'hifld_hospitals' dataset
 	def process_hifld_hospitals(self, dataset: pd.DataFrame):
 		'''
@@ -1427,6 +1512,8 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
+
+		return dataset  												# ==>
 
 	# Process 'hifld_local_emergency_operations_centers' dataset
 	def process_hifld_local_emergency_operations_centers(self, dataset: pd.DataFrame):
@@ -1482,6 +1569,8 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
 
+		return dataset  												# ==>
+
 	# Process 'hifld_nursing_homes' dataset
 	def process_hifld_nursing_homes(self, dataset: pd.DataFrame):
 		'''
@@ -1520,6 +1609,8 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
+
+		return dataset  												# ==>
 
 	# Process 'hifld_public_health_departments' dataset
 	def process_hifld_public_health_departments(self, dataset: pd.DataFrame):
@@ -1575,6 +1666,8 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
 
+		return dataset  												# ==>
+
 	# Process 'hifld_urgent_care_facilities' dataset
 	def process_hifld_urgent_care_facilities(self, dataset: pd.DataFrame):
 		'''
@@ -1628,6 +1721,8 @@ class Database:
 
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
+
+		return dataset  												# ==>
 
 	# Process 'hifld_us_ports_of_entry' dataset
 	def process_hifld_us_ports_of_entry(self, dataset: pd.DataFrame):
@@ -1695,6 +1790,8 @@ class Database:
 		# Copy to iso level 4
 		dataset['iso_level_4'] = dataset['city']
 
+		return dataset  												# ==>
+
 	# Process 'ihme_hospitalisation' dataset
 	def process_ihme_hospitalisation(self, dataset: pd.DataFrame):
 		'''
@@ -1716,6 +1813,8 @@ class Database:
 
 		# Drop location name
 		dataset.drop(columns='location_name', inplace=True)
+
+		return dataset  												# ==>
 
 	# Process 'nextstrain_phylogeny' dataset
 	def process_nextstrain_phylogeny(self, dataset: pd.DataFrame):
@@ -1742,6 +1841,8 @@ class Database:
 				)
 		)
 
+		return dataset  												# ==>
+
 	# Process 'owd_tests_conducted' dataset
 	def process_owd_tests_conducted(self, dataset: pd.DataFrame):
 		'''
@@ -1753,6 +1854,8 @@ class Database:
 		# Add country.
 		dataset['iso_level_1'] = dataset['code']
 
+		return dataset  												# ==>
+
 	# Process 'wfp_travel_restrictions' dataset
 	def process_wfp_travel_restrictions(self, dataset: pd.DataFrame):
 		'''
@@ -1763,6 +1866,8 @@ class Database:
 
 		# Add country.
 		dataset['iso_level_1'] = dataset['iso3']
+
+		return dataset  												# ==>
 
 	# Process 'cdc_cities_census_tract_level' dataset
 	def process_cdc_cities_census_tract_level(self, dataset: pd.DataFrame):
@@ -1801,6 +1906,8 @@ class Database:
 		# Add city
 		dataset['iso_level_3'] = dataset['placename']
 
+		return dataset  												# ==>
+
 	# Process 'cdc_global_adult_tobacco_survey' dataset
 	def process_cdc_global_adult_tobacco_survey(self, dataset: pd.DataFrame):
 		'''
@@ -1837,6 +1944,8 @@ class Database:
 					else x.upper()
 			)
 
+		return dataset  												# ==>
+
 	# Process 'cdc_global_youth_tobacco_survey' dataset
 	def process_cdc_global_youth_tobacco_survey(self, dataset: pd.DataFrame):
 		'''
@@ -1872,6 +1981,8 @@ class Database:
 					None if x is None
 					else x.upper()
 			)
+
+		return dataset  												# ==>
 
 	# Process 'cdc_behavioral_risk_factor_surveillance' dataset
 	def process_cdc_behavioral_risk_factor_surveillance(self, dataset: pd.DataFrame):
@@ -1912,6 +2023,8 @@ class Database:
 					else x
 			)
 
+		return dataset  												# ==>
+
 	# Process 'cdc_chronic_disease_indicators' dataset
 	def process_cdc_chronic_disease_indicators(self, dataset: pd.DataFrame):
 		'''
@@ -1951,6 +2064,8 @@ class Database:
 					else x
 			)
 
+		return dataset  												# ==>
+
 	# Process 'usafacts_covid_19_by_county' dataset
 	def process_usafacts_covid_19_by_county(self, dataset: pd.DataFrame):
 		'''
@@ -1975,6 +2090,8 @@ class Database:
 		# Add county.
 		dataset['iso_level_3'] = dataset['county_name']
 
+		return dataset  												# ==>
+
 	# Process 'who_tuberculosis_case_notifications' dataset
 	def process_who_tuberculosis_case_notifications(self, dataset: pd.DataFrame):
 		'''
@@ -1985,6 +2102,56 @@ class Database:
 
 		# Add country.
 		dataset['iso_level_1'] = dataset['iso3']
+
+		return dataset  												# ==>
+
+	# Process 'wb_global_population' dataset
+	def process_wb_global_population(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Reshape the dataset
+		dataset = dataset \
+			.melt(id_vars=['country', 'country_code']) \
+			.rename(columns=dict(variable='year')) \
+			.dropna(axis=0, how='any')
+
+		# Fix year
+		dataset['year'] = dataset['year'].apply(lambda x: int(x[5:]))
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['country_code']
+
+		return dataset													# ==>
+
+	# Process 'wb_health_population_summary' dataset
+	def process_wb_health_population_summary(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['country_code']
+
+		return dataset													# ==>
+
+	# Process 'wb_world_development_indicators_summary' dataset
+	def process_wb_world_development_indicators_summary(self, dataset: pd.DataFrame):
+		'''
+		Load as-is.
+
+		:param dataset: Dataset to process
+		'''
+
+		# Add country.
+		dataset['iso_level_1'] = dataset['country_code']
+
+		return dataset													# ==>
 
 	# Process 'border_wait_times_at_us_canada_border' dataset
 	def process_border_wait_times_at_us_canada_border(self, file: str) -> int:
