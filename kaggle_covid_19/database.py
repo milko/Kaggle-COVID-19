@@ -364,8 +364,7 @@ class Database:
 				# Read the data
 				df = pd.read_csv(file + item)\
 					.drop(columns=['indicator_name', 'untitled_1'], errors='ignore')\
-					.melt(id_vars=['country_name', 'country_code', 'indicator_code'])\
-					.rename(columns=dict(variable='year'))\
+					.melt(id_vars=['country_name', 'country_code', 'indicator_code'], var_name='year')\
 					.dropna(axis=0, how='any')
 
 				# Normalise year
@@ -2115,8 +2114,7 @@ class Database:
 
 		# Reshape the dataset
 		dataset = dataset \
-			.melt(id_vars=['country', 'country_code']) \
-			.rename(columns=dict(variable='year')) \
+			.melt(id_vars=['country', 'country_code'], var_name='year') \
 			.dropna(axis=0, how='any')
 
 		# Fix year
